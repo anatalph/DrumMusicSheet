@@ -531,6 +531,7 @@ async function getData() {
           'chart.name as chart_name',
           'chart.artist as chart_artist_name',
           'chart.charter as chart_charter_name',
+          'chart.charter_normalized as chart_charter_normalized',
           'chart.diff_drums as difficulty_drums',
           'chart.diff_guitar as difficulty_guitar',
           'chart.diff_bass as difficulty_bass',
@@ -561,6 +562,7 @@ async function getData() {
               'chart.name as chart_name',
               'chart.artist as chart_artist_name',
               'chart.charter as chart_charter_name',
+              'chart.charter_normalized as chart_charter_normalized',
               'chart.diff_drums as difficulty_drums',
               'chart.diff_guitar as difficulty_guitar',
               'chart.diff_bass as difficulty_bass',
@@ -603,7 +605,7 @@ async function getData() {
                   FROM local_charts lc
                   WHERE lc.artist_normalized  = r.artist_normalized
                     AND lc.song_normalized    = r.name_normalized
-                    AND lc.charter_normalized = r.chart_charter_name
+                    AND lc.charter_normalized = r.chart_charter_normalized
                 ) THEN 1 ELSE 0 END
               `.as('isInstalled'),
             ])
@@ -751,7 +753,11 @@ async function getData() {
           join
             .onRef('local.artist_normalized', '=', 'r.artist_normalized')
             .onRef('local.song_normalized', '=', 'r.name_normalized')
-            .onRef('local.charter_normalized', '=', 'r.chart_charter_name'),
+            .onRef(
+              'local.charter_normalized',
+              '=',
+              'r.chart_charter_normalized',
+            ),
         )
         .select([
           'r.artist_normalized as artist_normalized',
