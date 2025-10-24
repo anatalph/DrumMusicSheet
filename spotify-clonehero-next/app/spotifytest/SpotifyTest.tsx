@@ -2,6 +2,8 @@
 
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import SpotifyTableDownloader, {
+  PickedSpotifyAlbums,
+  PickedSpotifyPlaylists,
   SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
@@ -236,23 +238,6 @@ type PickedChorusCharts = Pick<
 > & {
   isInstalled: number;
 };
-
-type PickedSpotifyPlaylists = Pick<
-  SpotifyPlaylists,
-  | 'id'
-  | 'snapshot_id'
-  | 'name'
-  | 'collaborative'
-  | 'owner_display_name'
-  | 'owner_external_url'
-  | 'total_tracks'
-  | 'updated_at'
->;
-
-type PickedSpotifyAlbums = Pick<
-  SpotifyAlbums,
-  'id' | 'name' | 'artist_name' | 'total_tracks' | 'updated_at'
->;
 
 async function getData() {
   const db = await getLocalDb();

@@ -47,6 +47,8 @@ import {
 } from '@/components/ChartInstruments';
 import {RxExternalLink} from 'react-icons/rx';
 import {NotesData} from '@eliwhite/scan-chart';
+import {SpotifyAlbums, SpotifyPlaylists} from '@/lib/local-db/types';
+import {Disc3, User} from 'lucide-react';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -58,6 +60,23 @@ export type SpotifyChartData = {
   isInstalled: boolean;
 } & Omit<ChartResponseEncore, 'notesData'> & {notesData?: NotesData};
 
+export type PickedSpotifyPlaylists = Pick<
+  SpotifyPlaylists,
+  | 'id'
+  | 'snapshot_id'
+  | 'name'
+  | 'collaborative'
+  | 'owner_display_name'
+  | 'owner_external_url'
+  | 'total_tracks'
+  | 'updated_at'
+>;
+
+export type PickedSpotifyAlbums = Pick<
+  SpotifyAlbums,
+  'id' | 'name' | 'artist_name' | 'total_tracks' | 'updated_at'
+>;
+
 export type SpotifyPlaysRecommendations = {
   artist: string;
   song: string;
@@ -65,6 +84,8 @@ export type SpotifyPlaysRecommendations = {
   spotifyUrl?: string | null;
   previewUrl?: string | null;
   matchingCharts: SpotifyChartData[];
+  albumMemberships?: PickedSpotifyAlbums[];
+  playlistMemberships?: PickedSpotifyPlaylists[];
 };
 
 type SongRow = {
@@ -76,6 +97,10 @@ type SongRow = {
   previewUrl?: string | null;
   modifiedTime: Date; // Most recent chart from this song
   subRows: ChartRow[];
+  source?: {
+    albums: PickedSpotifyAlbums[];
+    playlists: PickedSpotifyPlaylists[];
+  };
 };
 
 type ChartRow = {
@@ -186,6 +211,24 @@ const columns = [
     enableMultiSort: true,
     cell: props => {
       return props.getValue();
+    },
+  }),
+  columnHelper.accessor('source', {
+    header: 'Source',
+    maxSize: 150,
+    enableSorting: false,
+
+    cell: props => {
+      if (!props.row.getIsExpanded()) {
+        return null;
+      }
+
+      const value = props.getValue();
+      if (value == null) {
+        return null;
+      }
+
+      return <SourceRenderer source={value} />;
     },
   }),
   columnHelper.accessor('charter', {
@@ -446,6 +489,15 @@ export default function SpotifyTableDownloader({
             }
             return maxDate;
           }, new Date(track.matchingCharts[0].modifiedTime)),
+          ...(track.albumMemberships != null &&
+          track.playlistMemberships != null
+            ? {
+                source: {
+                  albums: track.albumMemberships,
+                  playlists: track.playlistMemberships,
+                },
+              }
+            : {}),
           subRows: track.matchingCharts.map((chart, subIndex) => ({
             id: subIndex,
             artist: chart.artist,
@@ -634,7 +686,7 @@ export default function SpotifyTableDownloader({
                     return (
                       <TableCell
                         className={[
-                          row.getIsExpanded() ? 'py-2 bg-secondary' : '',
+                          row.getIsExpanded() ? 'py-1 bg-secondary' : 'py-1',
                         ].join(' ')}
                         key={cell.id}
                         style={{
@@ -751,4 +803,37 @@ function DownloadButton({
     case 'not-downloading':
       return <Button onClick={handler}>Download</Button>;
   }
+}
+
+function SourceRenderer({source}: {source: NonNullable<SongRow['source']>}) {
+  let albums = null;
+  let playlists = null;
+  if (source.playlists.length > 0) {
+    playlists = source.playlists.map(playlist => (
+      <div key={playlist.id} className="flex items-center gap-2 flex-1 min-w-0">
+        <p className="text-xs truncate">{playlist.name}</p>
+        <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+          <User className="h-3 w-3" />
+          {playlist.owner_display_name}
+        </span>
+      </div>
+    ));
+  }
+  if (source.albums.length > 0) {
+    albums = source.albums.map(album => (
+      <div key={album.id} className="flex items-center gap-2 flex-1 min-w-0">
+        <p className="text-xs truncate">{album.name}</p>
+        <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+          <Disc3 className="h-3 w-3" />
+          {album.artist_name}
+        </span>
+      </div>
+    ));
+  }
+  return (
+    <>
+      {playlists}
+      {albums}
+    </>
+  );
 }
