@@ -641,58 +641,107 @@ async function getData() {
         ])
         .groupBy(['deduped.artist_normalized', 'deduped.name_normalized']),
     )
-    // playlist aggregates by key
+    // playlist aggregates by key (deduped by playlist id)
     .with('playlist_aggregates_by_key', qb =>
       qb
-        .selectFrom('spotify_playlist_tracks as playlist_link')
-        .innerJoin(
-          'spotify_playlists as playlist',
-          'playlist.id',
-          'playlist_link.playlist_id',
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_playlist_tracks as playlist_link')
+            .innerJoin(
+              'spotify_playlists as playlist',
+              'playlist.id',
+              'playlist_link.playlist_id',
+            )
+            .innerJoin(
+              'spotify_tracks as st',
+              'st.id',
+              'playlist_link.track_id',
+            )
+            .select([
+              'st.artist_normalized as artist_normalized',
+              'st.name_normalized as name_normalized',
+              'playlist.id as playlist_id',
+              'playlist.snapshot_id as snapshot_id',
+              'playlist.name as name',
+              'playlist.collaborative as collaborative',
+              'playlist.owner_display_name as owner_display_name',
+              'playlist.owner_external_url as owner_external_url',
+              'playlist.total_tracks as total_tracks',
+              'playlist.updated_at as updated_at',
+            ])
+            .groupBy([
+              'st.artist_normalized',
+              'st.name_normalized',
+              'playlist.id',
+            ])
+            .as('deduped_playlists'),
         )
-        .innerJoin('spotify_tracks as st', 'st.id', 'playlist_link.track_id')
         .select([
-          'st.artist_normalized as artist_normalized',
-          'st.name_normalized as name_normalized',
+          'deduped_playlists.artist_normalized',
+          'deduped_playlists.name_normalized',
           sql<PickedSpotifyPlaylists[]>`
           json_group_array(
             json_object(
-              'id',                ${sql.ref('playlist.id')},
-              'snapshot_id',       ${sql.ref('playlist.snapshot_id')},
-              'name',              ${sql.ref('playlist.name')},
-              'collaborative',     ${sql.ref('playlist.collaborative')},
-              'owner_display_name',${sql.ref('playlist.owner_display_name')},
-              'owner_external_url',${sql.ref('playlist.owner_external_url')},
-              'total_tracks',      ${sql.ref('playlist.total_tracks')},
-              'updated_at',        ${sql.ref('playlist.updated_at')}
+              'id',                ${sql.ref('deduped_playlists.playlist_id')},
+              'snapshot_id',       ${sql.ref('deduped_playlists.snapshot_id')},
+              'name',              ${sql.ref('deduped_playlists.name')},
+              'collaborative',     ${sql.ref('deduped_playlists.collaborative')},
+              'owner_display_name',${sql.ref('deduped_playlists.owner_display_name')},
+              'owner_external_url',${sql.ref('deduped_playlists.owner_external_url')},
+              'total_tracks',      ${sql.ref('deduped_playlists.total_tracks')},
+              'updated_at',        ${sql.ref('deduped_playlists.updated_at')}
             )
           )
         `.as('playlist_memberships'),
         ])
-        .groupBy(['st.artist_normalized', 'st.name_normalized']),
+        .groupBy([
+          'deduped_playlists.artist_normalized',
+          'deduped_playlists.name_normalized',
+        ]),
     )
-    // album aggregates by key
+    // album aggregates by key (deduped by album id)
     .with('album_aggregates_by_key', qb =>
       qb
-        .selectFrom('spotify_album_tracks as album_link')
-        .innerJoin('spotify_albums as album', 'album.id', 'album_link.album_id')
-        .innerJoin('spotify_tracks as st', 'st.id', 'album_link.track_id')
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_album_tracks as album_link')
+            .innerJoin(
+              'spotify_albums as album',
+              'album.id',
+              'album_link.album_id',
+            )
+            .innerJoin('spotify_tracks as st', 'st.id', 'album_link.track_id')
+            .select([
+              'st.artist_normalized as artist_normalized',
+              'st.name_normalized as name_normalized',
+              'album.id as album_id',
+              'album.name as name',
+              'album.artist_name as artist_name',
+              'album.total_tracks as total_tracks',
+              'album.updated_at as updated_at',
+            ])
+            .groupBy(['st.artist_normalized', 'st.name_normalized', 'album.id'])
+            .as('deduped_albums'),
+        )
         .select([
-          'st.artist_normalized as artist_normalized',
-          'st.name_normalized as name_normalized',
+          'deduped_albums.artist_normalized',
+          'deduped_albums.name_normalized',
           sql<PickedSpotifyAlbums[]>`
           json_group_array(
             json_object(
-              'id',           ${sql.ref('album.id')},
-              'name',         ${sql.ref('album.name')},
-              'artist_name',  ${sql.ref('album.artist_name')},
-              'total_tracks', ${sql.ref('album.total_tracks')},
-              'updated_at',   ${sql.ref('album.updated_at')}
+              'id',           ${sql.ref('deduped_albums.album_id')},
+              'name',         ${sql.ref('deduped_albums.name')},
+              'artist_name',  ${sql.ref('deduped_albums.artist_name')},
+              'total_tracks', ${sql.ref('deduped_albums.total_tracks')},
+              'updated_at',   ${sql.ref('deduped_albums.updated_at')}
             )
           )
         `.as('album_memberships'),
         ])
-        .groupBy(['st.artist_normalized', 'st.name_normalized']),
+        .groupBy([
+          'deduped_albums.artist_normalized',
+          'deduped_albums.name_normalized',
+        ]),
     )
     // local installed flag by key using combined charts
     .with('local_chart_flags_by_key', qb =>
