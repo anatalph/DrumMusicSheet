@@ -49,6 +49,14 @@ import {RxExternalLink} from 'react-icons/rx';
 import {NotesData} from '@eliwhite/scan-chart';
 import {SpotifyAlbums, SpotifyPlaylists} from '@/lib/local-db/types';
 import {Disc3, User} from 'lucide-react';
+import {cx} from 'class-variance-authority';
+import {cn} from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -206,8 +214,7 @@ const columns = [
     },
   }),
   columnHelper.accessor('playCount', {
-    header: '# Plays',
-    minSize: 250,
+    header: () => <span className="whitespace-nowrap"># Plays</span>,
     enableMultiSort: true,
     cell: props => {
       return props.getValue();
@@ -224,7 +231,7 @@ const columns = [
       }
 
       const value = props.getValue();
-      if (value == null) {
+      if (value == null || (value.albums == null && value.playlists == null)) {
         return null;
       }
 
@@ -233,7 +240,7 @@ const columns = [
   }),
   columnHelper.accessor('charter', {
     header: 'Charter',
-    minSize: 200,
+    minSize: 150,
     enableMultiSort: true,
     sortingFn: 'alphanumeric',
     cell: props => {
@@ -639,76 +646,80 @@ export default function SpotifyTableDownloader({
       <div
         className="bg-card text-card-foreground rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
         ref={tableContainerRef}>
-        <Table>
-          <TableHeader className="sticky top-0">
-            {table.getHeaderGroups().map(headerGroup => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map(header => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={`bg-card py-0 ${
-                        header.column.getCanSort()
-                          ? 'cursor-pointer select-none'
-                          : ''
-                      }`}
-                      style={{
-                        textAlign: (header.column.columnDef.meta as any)?.align,
-                        width: header.getSize(),
-                      }}
-                      onClick={header.column.getToggleSortingHandler()}>
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {{
-                        asc: ' 🔼',
-                        desc: ' 🔽',
-                      }[header.column.getIsSorted() as string] ?? null}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {paddingTop > 0 && (
-              <TableRow>
-                <TableCell style={{height: `${paddingTop}px`}}></TableCell>
-              </TableRow>
-            )}
-            {virtualRows.map(virtualRow => {
-              const row = rows[virtualRow.index] as Row<RowType>;
-              return (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map(cell => {
+        <TooltipProvider>
+          <Table>
+            <TableHeader className="sticky top-0">
+              {table.getHeaderGroups().map(headerGroup => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map(header => {
                     return (
-                      <TableCell
-                        className={[
-                          row.getIsExpanded() ? 'py-1 bg-secondary' : 'py-1',
-                        ].join(' ')}
-                        key={cell.id}
+                      <TableHead
+                        key={header.id}
+                        colSpan={header.colSpan}
+                        className={`bg-card py-0 ${
+                          header.column.getCanSort()
+                            ? 'cursor-pointer select-none'
+                            : ''
+                        }`}
                         style={{
-                          textAlign: (cell.column.columnDef.meta as any)?.align,
-                        }}>
+                          textAlign: (header.column.columnDef.meta as any)
+                            ?.align,
+                          width: header.getSize(),
+                        }}
+                        onClick={header.column.getToggleSortingHandler()}>
                         {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
+                          header.column.columnDef.header,
+                          header.getContext(),
                         )}
-                      </TableCell>
+                        {{
+                          asc: ' 🔼',
+                          desc: ' 🔽',
+                        }[header.column.getIsSorted() as string] ?? null}
+                      </TableHead>
                     );
                   })}
                 </TableRow>
-              );
-            })}
-            {paddingBottom > 0 && (
-              <TableRow>
-                <TableCell style={{height: `${paddingBottom}px`}} />
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {paddingTop > 0 && (
+                <TableRow>
+                  <TableCell style={{height: `${paddingTop}px`}}></TableCell>
+                </TableRow>
+              )}
+              {virtualRows.map(virtualRow => {
+                const row = rows[virtualRow.index] as Row<RowType>;
+                return (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map(cell => {
+                      return (
+                        <TableCell
+                          className={[
+                            row.getIsExpanded() ? 'py-1 bg-secondary' : 'py-1',
+                          ].join(' ')}
+                          key={cell.id}
+                          style={{
+                            textAlign: (cell.column.columnDef.meta as any)
+                              ?.align,
+                          }}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+              {paddingBottom > 0 && (
+                <TableRow>
+                  <TableCell style={{height: `${paddingBottom}px`}} />
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TooltipProvider>
       </div>
     </>
   );
@@ -746,13 +757,13 @@ const Filters = memo(function Filters({
             size="md"
             instrument={instrument}
             key={instrument}
-            classNames={
-              `cursor-pointer ` +
-              (selectedFilters.length === 0 ||
-              selectedFilters.includes(instrument)
+            classNames={cn(
+              'cursor-pointer',
+              selectedFilters.length === 0 ||
+                selectedFilters.includes(instrument)
                 ? 'opacity-100'
-                : 'opacity-50')
-            }
+                : 'opacity-50',
+            )}
             onClick={callback}
           />
         );
@@ -811,7 +822,14 @@ function SourceRenderer({source}: {source: NonNullable<SongRow['source']>}) {
   if (source.playlists.length > 0) {
     playlists = source.playlists.map(playlist => (
       <div key={playlist.id} className="flex items-center gap-2 flex-1 min-w-0">
-        <p className="text-xs truncate">{playlist.name}</p>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="text-xs truncate" title={playlist.name}>
+              {playlist.name}
+            </p>
+          </TooltipTrigger>
+          <TooltipContent side="top">{playlist.name}</TooltipContent>
+        </Tooltip>
         <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
           <User className="h-3 w-3" />
           {playlist.owner_display_name}
@@ -822,7 +840,14 @@ function SourceRenderer({source}: {source: NonNullable<SongRow['source']>}) {
   if (source.albums.length > 0) {
     albums = source.albums.map(album => (
       <div key={album.id} className="flex items-center gap-2 flex-1 min-w-0">
-        <p className="text-xs truncate">{album.name}</p>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="text-xs truncate" title={album.name}>
+              {album.name}
+            </p>
+          </TooltipTrigger>
+          <TooltipContent side="top">{album.name}</TooltipContent>
+        </Tooltip>
         <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
           <Disc3 className="h-3 w-3" />
           {album.artist_name}
@@ -831,9 +856,9 @@ function SourceRenderer({source}: {source: NonNullable<SongRow['source']>}) {
     ));
   }
   return (
-    <>
+    <div className="max-w-[175px] overflow-x-hidden">
       {playlists}
       {albums}
-    </>
+    </div>
   );
 }
