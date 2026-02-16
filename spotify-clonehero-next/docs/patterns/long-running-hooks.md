@@ -1,8 +1,4 @@
----
-description: API pattern for long running processes in React components with progress udpates
-globs:
-alwaysApply: false
----
+# Long Running Process Pattern
 
 In this project, sometimes we need to do long running processes. For example, when fetching a user's entire spotify library, or downloading information about available charts on chorus, or scanning the user's local songs folder.
 
@@ -12,9 +8,11 @@ When implementing these long running processes you must support a few requiremen
 - The long running task can be kicked off early, and awaited later
 - The long running task can be canceled using an AbortController
 
+## Example Hook Implementation
+
 Here is an example scaffolding of how a hook supporting a long running task should look.
 
-```
+```ts
 // Whatever you want to store in here
 type Progress = {
   finished: number;
@@ -81,9 +79,11 @@ function useLongTaskWithProgress() {
 }
 ```
 
+## Example Usage
+
 And this is an example of how to use that hook within a component to render progress, kick off the request early, and are able to cancel the task with an AbortController:
 
-```
+```tsx
 export default function App() {
   const { progress, run } = useLongTaskWithProgress();
   const [results, setResults] = useState<number[]>([]);
