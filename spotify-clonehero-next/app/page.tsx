@@ -1,17 +1,16 @@
-import {ReactNode} from 'react';
-import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
 import {
-  CardTitle,
-  CardDescription,
-  CardHeader,
-  CardContent,
-  Card,
-  CardFooter,
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
-import {Button, buttonVariants} from '@/components/ui/button';
-import {RxExternalLink} from 'react-icons/rx';
+import Link from 'next/link';
+import { RxExternalLink } from 'react-icons/rx';
 import SupportedBrowserWarning from './SupportedBrowserWarning';
-import {Badge} from '@/components/ui/badge';
 
 export default function Home() {
   return (
@@ -104,6 +103,21 @@ export default function Home() {
               href="/updates"
               className={buttonVariants({variant: 'default'})}>
               Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>MIDI Test</CardTitle>
+            <CardDescription>
+              Test your electronic drum kit connection and mapping.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link
+              href="/midi-test"
+              className={buttonVariants({variant: 'outline'})}>
+              Test Connection
             </Link>
           </CardContent>
         </Card>

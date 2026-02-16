@@ -1,79 +1,77 @@
-import {Difficulty} from '@eliwhite/scan-chart';
+import { Difficulty } from '@eliwhite/scan-chart';
 
-import {Button} from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle
 } from '@/components/ui/dialog';
-import {Label} from '@/components/ui/label';
-import {Slider} from '@/components/ui/slider';
-import {Switch} from '@/components/ui/switch';
 import {
-  ArrowLeft,
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Menu,
-  X,
-  Settings2,
-  Target,
-  Plus,
-  Minus,
-  RotateCcw,
-  Star,
-  Trash2,
-  Maximize2,
-  Minimize2,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { ChartResponseEncore } from '@/lib/chartSelection';
+import {
+    ArrowLeft,
+    Maximize2,
+    Menu,
+    Minimize2,
+    Minus,
+    Pause,
+    Play,
+    Plus,
+    Settings2,
+    Star,
+    Target,
+    Trash2,
+    Volume2,
+    VolumeX,
+    X
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState
 } from 'react';
-import {useRouter} from 'next/navigation';
 import useInterval from 'use-interval';
-import {ChartResponseEncore} from '@/lib/chartSelection';
 
-import {getBasename} from '@/lib/src-shared/utils';
-import {cn} from '@/lib/utils';
-import SheetMusic from './SheetMusic';
-import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {AudioManager, PracticeModeConfig} from '@/lib/preview/audioManager';
-import CloneHeroRenderer from './CloneHeroRenderer';
-import Link from 'next/link';
-import Image from 'next/image';
-import {generateClickTrackFromMeasures} from './generateClickTrack';
-import type {ClickVolumes} from './generateClickTrack';
-import convertToVexFlow from './convertToVexflow';
-import debounce from 'debounce';
-import wholeNote from '@/public/assets/svgs/whole-note.svg';
-import quarterNote from '@/public/assets/svgs/quarter-note.svg';
+import { MidiConnectionStatus } from '@/components/MidiConnectionStatus';
+import { toast } from '@/components/ui/toast';
+import { defaultConfig, extractFills } from '@/lib/fill-detector';
+import { useMidiInput } from '@/lib/hooks/useMidiInput';
+import { AudioManager, PracticeModeConfig } from '@/lib/preview/audioManager';
+import { Files, ParsedChart } from '@/lib/preview/chorus-chart-processing';
+import { getBasename } from '@/lib/src-shared/utils';
+import { createClient } from '@/lib/supabase/client';
+import { cn } from '@/lib/utils';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
+import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
-import {extractFills, defaultConfig} from '@/lib/fill-detector';
-import {toast} from '@/components/ui/toast';
-import {createClient} from '@/lib/supabase/client';
-import {unfavoriteSongByHash} from '../../account/actions';
+import wholeNote from '@/public/assets/svgs/whole-note.svg';
+import debounce from 'debounce';
+import Image from 'next/image';
+import Link from 'next/link';
+import { unfavoriteSongByHash } from '../../account/actions';
 import {
-  saveSongByHash,
-  savePracticeSection,
-  getPracticeSections,
-  deletePracticeSection,
+    deletePracticeSection,
+    getPracticeSections,
+    savePracticeSection,
+    saveSongByHash
 } from './actions';
+import CloneHeroRenderer from './CloneHeroRenderer';
+import convertToVexFlow from './convertToVexflow';
+import type { ClickVolumes } from './generateClickTrack';
+import { generateClickTrackFromMeasures } from './generateClickTrack';
+import SheetMusic from './SheetMusic';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -179,6 +177,8 @@ export default function Renderer({
     Array<{id: string; start_ms: number; end_ms: number}>
   >([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const midi = useMidiInput();
 
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
@@ -1467,17 +1467,25 @@ export default function Renderer({
                   Charted by {metadata.charter}
                 </div>
               </h1>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 px-3 py-1"
-                onClick={handleSaveClick}>
-                <Star
-                  className="h-4 w-4"
-                  fill={isSaved ? 'currentColor' : 'none'}
+              <div className="flex items-center gap-2">
+                <MidiConnectionStatus
+                    devices={midi.devices}
+                    selectedDeviceId={midi.selectedDeviceId}
+                    onSelectDevice={midi.setSelectedDeviceId}
+                    isSupported={midi.isSupported}
                 />
-                {isSaved ? 'Saved' : 'Save'}
-              </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2 px-3 py-1"
+                    onClick={handleSaveClick}>
+                    <Star
+                    className="h-4 w-4"
+                    fill={isSaved ? 'currentColor' : 'none'}
+                    />
+                    {isSaved ? 'Saved' : 'Save'}
+                </Button>
+              </div>
             </div>
             <div className="flex flex-1 gap-2 overflow-hidden">
               <div

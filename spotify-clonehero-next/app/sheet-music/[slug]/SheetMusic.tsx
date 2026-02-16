@@ -1,23 +1,25 @@
-import {Difficulty, parseChartFile} from '@eliwhite/scan-chart';
+import { PracticeModeConfig } from '@/lib/preview/audioManager';
+import { parseChartFile } from '@eliwhite/scan-chart';
 import {
-  RefObject,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
-  createRef,
+    createRef,
+    forwardRef,
+    RefObject,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from 'react';
 import convertToVexFlow from './convertToVexflow';
+import { Playhead } from './Playhead';
 import {
-  RenderData,
-  renderMusic,
-  createConsolidatedTimePositionMap,
+    createConsolidatedTimePositionMap,
+    RenderData,
+    renderMusic,
 } from './renderVexflow';
-import {PracticeModeConfig} from '@/lib/preview/audioManager';
-import {Playhead} from './Playhead';
 
-import {cn} from '@/lib/utils';
+import { MidiMessage } from '@/lib/hooks/useMidiInput';
+import { getDrumInstrumentFromMidi } from '@/lib/midi-mapping';
+import { cn } from '@/lib/utils';
 import debounce from 'debounce';
 import cleanLyrics from './cleanLyrics';
 
@@ -37,6 +39,7 @@ export default function SheetMusic({
   onPracticeMeasureSelect,
   selectionIndex,
   audioManagerRef,
+  lastMidiNote,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -51,6 +54,7 @@ export default function SheetMusic({
   onPracticeMeasureSelect: (measureIndex: number) => void;
   selectionIndex: number | null;
   audioManagerRef: RefObject<any>;
+  lastMidiNote?: MidiMessage | null;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
@@ -63,6 +67,49 @@ export default function SheetMusic({
   }, [chart, track]);
 
   const [renderData, setRenderData] = useState<RenderData[]>([]);
+
+  // Visual feedback state
+  const [activeHits, setActiveHits] = useState<{id: number; instrument: string; x: number; y: number}[]>([]);
+
+  useEffect(() => {
+    if (!lastMidiNote) return;
+
+    const instrument = getDrumInstrumentFromMidi(lastMidiNote.note);
+    if (!instrument) return;
+
+    // Approximate mapping for visualization (0 is top, 100 is bottom)
+    // Kick: Bottom (100)
+    // Snare: Middle-Low (70)
+    // Toms: Middle (50)
+    // HiHat: Top-Middle (30)
+    // Cymbals: Top (10)
+    let yPercent = 50;
+    switch(instrument) {
+        case 'kick': yPercent = 90; break;
+        case 'snare': yPercent = 60; break;
+        case 'floor-tom': yPercent = 70; break;
+        case 'mid-tom': yPercent = 50; break;
+        case 'high-tom': yPercent = 40; break;
+        case 'hihat': yPercent = 30; break;
+        case 'crash': yPercent = 10; break;
+        case 'ride': yPercent = 10; break;
+    }
+
+    const newHit = {
+        id: Date.now(),
+        instrument,
+        x: 50, // Center horizontally for now, or maybe map to time?
+        y: yPercent
+    };
+
+    setActiveHits(prev => [...prev, newHit]);
+
+    // Remove hit after animation
+    setTimeout(() => {
+        setActiveHits(prev => prev.filter(h => h.id !== newHit.id));
+    }, 200);
+
+  }, [lastMidiNote]);
 
   // Create consolidated time->position map for the playhead
   const consolidatedTimeMap = useMemo(() => {
@@ -200,6 +247,21 @@ export default function SheetMusic({
           />
         )}
         {measureHighlights}
+
+        {/* MIDI Hit Overlay */}
+        <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+            {activeHits.map(hit => (
+                <div
+                    key={hit.id}
+                    className="absolute w-full h-8 bg-blue-500/30 animate-pulse transition-opacity"
+                    style={{
+                        top: `${hit.y}%`,
+                        opacity: 0.5,
+                        boxShadow: '0 0 20px 5px rgba(59, 130, 246, 0.5)'
+                    }}
+                />
+            ))}
+        </div>
       </div>
     </div>
   );
