@@ -34,150 +34,249 @@ export default function MidiTestPage() {
             newSet.delete(instrument);
             return newSet;
           });
-        }, 150);
+        }, 100);
       }
     }
   }, [midi.lastNote]);
 
   return (
-    <div className="container mx-auto p-8 max-w-4xl">
-      <div className="mb-6 flex items-center gap-4">
-        <Link href="/" passHref>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-        </Link>
-        <h1 className="text-3xl font-bold">MIDI Connect Test</h1>
-      </div>
-
-      <div className="grid gap-8 md:grid-cols-2">
-        {/* Connection & Log Section */}
-        <div className="space-y-6">
-          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Connection Status</h2>
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Status:</span>
-                <MidiConnectionStatus
+    <div className="min-h-screen bg-[#1a1a1a] text-white p-8 font-sans">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" passHref>
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 hover:text-white">
+                <ArrowLeft className="h-6 w-6" />
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold tracking-tight">MIDI Input Test</h1>
+          </div>
+          <div className="bg-[#2a2a2a] p-2 rounded-lg flex items-center gap-4">
+             <span className="text-sm text-gray-400">Connection:</span>
+             <MidiConnectionStatus
                   devices={midi.devices}
                   selectedDeviceId={midi.selectedDeviceId}
                   onSelectDevice={midi.setSelectedDeviceId}
                   isSupported={midi.isSupported}
                 />
-              </div>
-              {midi.selectedDeviceId && (
-                <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-md border border-green-200">
-                  ✓ Device Connected
-                </div>
-              )}
-              {!midi.isSupported && (
-                <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md border border-red-200">
-                  ✕ Web MIDI API not supported
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm h-[400px] flex flex-col">
-            <h2 className="text-xl font-semibold mb-4">Input Log</h2>
-            <div className="flex-1 overflow-y-auto font-mono text-sm border rounded-md p-4 bg-muted/50">
-                {messageLog.length === 0 ? (
-                    <div className="text-muted-foreground italic text-center pt-8">
-                        No MIDI messages received yet...
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {messageLog.map((msg, i) => {
-                            const instrument = getDrumInstrumentFromMidi(msg.note);
-                            return (
-                                <div key={msg.timestamp + i} className="flex justify-between border-b border-border/50 pb-1 last:border-0">
-                                    <span>
-                                        Note: <span className="font-bold text-primary">{msg.note}</span>
-                                        {instrument && <span className="text-muted-foreground ml-2">({instrument})</span>}
-                                    </span>
-                                    <span className="text-muted-foreground">Vel: {msg.velocity}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
           </div>
         </div>
 
-        {/* Visualization Section */}
-        <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm flex flex-col items-center justify-center relative min-h-[500px]">
-            <h2 className="text-xl font-semibold absolute top-6 left-6">Visualizer</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-150px)] min-h-[600px]">
+           {/* Visualizer (Center/Left Focus) */}
+           <div className="lg:col-span-2 relative bg-[#222] rounded-2xl shadow-2xl border border-[#333] overflow-hidden flex items-center justify-center">
+                {/* Background Pattern or Gradient could go here */}
 
-            {/* Simple Drum Kit Layout */}
-            <div className="relative w-full h-[400px]">
-                {/* Cymbals (Top) */}
-                <DrumPad
-                    active={activeDrums.has('crash')}
-                    label="Crash"
-                    className="absolute top-10 left-10 w-24 h-24 rounded-full bg-yellow-500/20 border-yellow-500"
-                />
-                <DrumPad
-                    active={activeDrums.has('ride')}
-                    label="Ride"
-                    className="absolute top-10 right-10 w-24 h-24 rounded-full bg-blue-500/20 border-blue-500"
-                />
-                <DrumPad
-                    active={activeDrums.has('hihat')}
-                    label="Hi-Hat"
-                    className="absolute top-20 left-1/3 w-20 h-20 rounded-full bg-yellow-300/20 border-yellow-300"
-                />
+                <div className="relative w-[800px] h-[600px] scale-75 md:scale-90 lg:scale-100 origin-center transition-transform">
 
-                {/* Toms (Middle) */}
-                <DrumPad
-                    active={activeDrums.has('high-tom')}
-                    label="High Tom"
-                    className="absolute top-1/3 left-1/4 w-20 h-20 rounded-full bg-red-400/20 border-red-400"
-                />
-                <DrumPad
-                    active={activeDrums.has('mid-tom')}
-                    label="Mid Tom"
-                    className="absolute top-1/3 right-1/4 w-20 h-20 rounded-full bg-red-500/20 border-red-500"
-                />
-                <DrumPad
-                    active={activeDrums.has('floor-tom')}
-                    label="Floor Tom"
-                    className="absolute bottom-1/3 right-10 w-24 h-24 rounded-full bg-red-600/20 border-red-600"
-                />
+                    {/* Crash (Top Left) - Green */}
+                    <DrumCircle
+                        active={activeDrums.has('crash')}
+                        label="CRASH"
+                        size={140}
+                        className="absolute top-[10%] left-[20%]"
+                        activeColor="#27ae60" // green
+                    />
 
-                {/* Snare (Center-Left) */}
-                <DrumPad
-                    active={activeDrums.has('snare')}
-                    label="Snare"
-                    className="absolute bottom-1/3 left-1/4 w-24 h-24 rounded-full bg-slate-400/20 border-slate-400"
-                />
+                    {/* Ride (Top Right) - Blue */}
+                    <DrumCircle
+                        active={activeDrums.has('ride')}
+                        label="RIDE"
+                        size={140}
+                        className="absolute top-[10%] right-[20%]"
+                        activeColor="#2980b9" // blue
+                    />
 
-                {/* Kick (Bottom Center) */}
-                <DrumPad
-                    active={activeDrums.has('kick')}
-                    label="Kick"
-                    className="absolute bottom-5 left-1/2 -translate-x-1/2 w-32 h-32 rounded-full bg-orange-600/20 border-orange-600"
-                />
-            </div>
+                    {/* Hi-Hat (Left) - Yellow */}
+                    <DrumCircle
+                        active={activeDrums.has('hihat')}
+                        label="HI-HAT"
+                        size={120}
+                        className="absolute top-[35%] left-[10%]"
+                        activeColor="#ffb142" // yellow
+                    />
+                    {/* Open Hi-Hat Indicator (Overlay or separate?) - For now treating generic HO/HC as hihat */}
 
-            <div className="mt-8 text-center text-sm text-muted-foreground">
-                <p>Hit your drums to verify the mapping.</p>
-                <p>If hits appear but map to the wrong instrument, we may need to adjust the MIDI map.</p>
-            </div>
+                    {/* High Tom (Center Left) - Yellow */}
+                    <DrumCircle
+                        active={activeDrums.has('high-tom')}
+                        label="HI TOM"
+                        size={110}
+                        className="absolute top-[30%] left-[38%]"
+                        activeColor="#ffb142" // yellow
+                    />
+
+                    {/* Mid Tom (Center Right) - Blue */}
+                    <DrumCircle
+                        active={activeDrums.has('mid-tom')}
+                        label="MID TOM"
+                        size={110}
+                        className="absolute top-[30%] right-[38%]"
+                        activeColor="#2980b9" // blue
+                    />
+
+                    {/* Low Tom (Right) - Green */}
+                    <DrumCircle
+                        active={activeDrums.has('floor-tom')}
+                        label="LOW TOM"
+                        size={130}
+                        className="absolute top-[45%] right-[15%]"
+                        activeColor="#27ae60" // green
+                    />
+
+                    {/* Snare (Center Bottom) - Red */}
+                    <DrumCircle
+                        active={activeDrums.has('snare')}
+                        label="SNARE"
+                        size={130}
+                        className="absolute top-[55%] left-1/2 -translate-x-1/2"
+                        activeColor="#e74c3c" // red
+                    />
+
+                    {/* Kick (Pedal - Bottom Center) - Orange */}
+                    <DrumPedal
+                        active={activeDrums.has('kick')}
+                        label="KICK"
+                        className="absolute bottom-[5%] left-[55%] -translate-x-1/2"
+                        activeColor="#ff793f" // orange
+                    />
+
+                    {/* Hi-Hat Pedal (Bottom Left) - Yellow */}
+                    <DrumPedal
+                        active={activeDrums.has('pedal-hihat') || activeDrums.has('hihat-pedal')}
+                        label="PEDAL HH"
+                        className="absolute bottom-[5%] left-[35%] -translate-x-1/2"
+                        activeColor="#ffb142" // yellow
+                    />
+
+                </div>
+           </div>
+
+           {/* Log & Debug (Right Side) */}
+           <div className="bg-[#2a2a2a] rounded-xl border border-[#333] p-4 flex flex-col h-full">
+                <h2 className="text-lg font-semibold mb-4 text-gray-200 border-b border-[#444] pb-2">MIDI Event Log</h2>
+                <div className="flex-1 overflow-y-auto space-y-2 font-mono text-sm pr-2 custom-scrollbar">
+                    {messageLog.length === 0 ? (
+                        <div className="text-gray-500 italic text-center mt-10">Waiting for input...</div>
+                    ) : (
+                        messageLog.map((msg, i) => {
+                            const instrument = getDrumInstrumentFromMidi(msg.note);
+                            return (
+                                <div key={i} className="flex justify-between items-center bg-[#222] p-2 rounded border border-[#333]">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[#888]">{msg.note}</span>
+                                        <span className={cn(
+                                            "font-bold",
+                                            instrument ? "text-yellow-400" : "text-gray-500"
+                                        )}>
+                                            {instrument?.toUpperCase() || 'UNKNOWN'}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        Vol: {msg.velocity}
+                                    </div>
+                                </div>
+                            )
+                        })
+                    )}
+                </div>
+           </div>
         </div>
       </div>
     </div>
   );
 }
 
-function DrumPad({ active, label, className }: { active: boolean; label: string; className?: string }) {
+function DrumCircle({
+    active,
+    label,
+    size,
+    className,
+    activeColor = "#FFC107" // default yellow if not specified
+}: {
+    active: boolean;
+    label: string;
+    size: number;
+    className?: string;
+    activeColor?: string;
+}) {
     return (
-        <div className={cn(
-            "flex items-center justify-center border-4 transition-all duration-75",
-            active ? "bg-opacity-80 scale-110 shadow-[0_0_30px_rgba(255,255,255,0.5)] bg-white text-black font-bold" : "text-muted-foreground",
-            className
-        )}>
-            {label}
+        <div
+            className={cn("flex flex-col items-center justify-center transition-all duration-75 group", className)}
+            style={{ width: size, height: size }}
+        >
+            <div
+                className={cn(
+                    "rounded-full w-full h-full flex items-center justify-center border-4 transition-all duration-75 relative",
+                    // Hover effect for checking position
+                    "group-hover:opacity-90",
+                     !active && "bg-[#4a4a4a] border-[#3a3a3a]"
+                )}
+                style={active ? {
+                    backgroundColor: activeColor,
+                    borderColor: activeColor,
+                    transform: 'scale(1.05)',
+                    boxShadow: `0 0 30px ${activeColor}66` // 40% opacity hex
+                } : {}}
+            >
+                {/* Inner hole circle for style */}
+                <div
+                    className={cn("w-1/4 h-1/4 rounded-full")}
+                    style={{ backgroundColor: active ? '#fff3' : '#2a2a2a' }}
+                />
+            </div>
+            <span
+                className={cn(
+                    "absolute -bottom-8 font-bold text-sm tracking-wider transition-colors uppercase",
+                     !active && "text-gray-400"
+                )}
+                style={active ? { color: activeColor } : {}}
+            >
+                {label}
+            </span>
         </div>
     );
+}
+
+function DrumPedal({
+    active,
+    label,
+    className,
+    activeColor = "#FFC107"
+}: {
+    active: boolean;
+    label: string;
+    className?: string;
+    activeColor?: string;
+}) {
+    return (
+        <div className={cn("flex flex-col items-center group", className)}>
+             <div
+                className={cn(
+                    "w-14 h-24 rounded-lg flex items-center justify-center border-4 transition-all duration-75",
+                    !active && "bg-[#4a4a4a] border-[#3a4a4a]"
+                )}
+                style={active ? {
+                    backgroundColor: activeColor,
+                    borderColor: activeColor,
+                    transform: 'scale(1.05)',
+                    boxShadow: `0 0 20px ${activeColor}66`
+                } : {}}
+             >
+                <div
+                    className={cn("w-full h-2 rounded-sm mx-1")}
+                    style={{ backgroundColor: active ? '#fff3' : '#2a2a2a' }}
+                />
+             </div>
+             <span
+                className={cn(
+                    "mt-2 font-bold text-sm tracking-wider transition-colors uppercase",
+                    !active && "text-gray-400"
+                )}
+                style={active ? { color: activeColor } : {}}
+            >
+                {label}
+            </span>
+        </div>
+    )
 }
