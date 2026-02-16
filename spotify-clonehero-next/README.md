@@ -19,6 +19,10 @@ Spotify CloneHero is a web-based toolset for Clone Hero players. It bridges the 
     -   [Local Database & Sync](docs/features/database.md)
     -   [Long Running Processes](docs/patterns/long-running-hooks.md)
 
+### User Guides
+
+-   [Managing Songs](docs/guides/managing-songs.md): Learn how to add, match, and download charts for your library.
+
 ## Getting Started
 
 ### Prerequisites
