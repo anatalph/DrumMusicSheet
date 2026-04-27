@@ -53,6 +53,14 @@ export class SceneReconciler {
   private sortedElements: ChartElement[] = [];
   /** Active (visible) groups by key. */
   private activeGroups = new Map<string, THREE.Group>();
+  /**
+   * Bumped on every structural change to `activeGroups` (add, delete, or
+   * recycle-then-recreate at the same key). Consumers like
+   * `InteractionManager` cache derived data keyed off active groups; size
+   * alone isn't enough because a recycle + re-add at the same key leaves
+   * the count untouched but the underlying THREE.Group/sprite differs.
+   */
+  private activeGroupsRevision = 0;
 
   /** Reusable set for updateWindow -- cleared and reused each frame. */
   private inWindowSet = new Set<string>();
@@ -103,6 +111,7 @@ export class SceneReconciler {
           this.scene.remove(group);
           this.renderers[oldEl.kind].recycle(group);
           this.activeGroups.delete(key);
+          this.activeGroupsRevision++;
         }
       }
     }
@@ -117,6 +126,7 @@ export class SceneReconciler {
           this.scene.remove(group);
           this.renderers[oldEl.kind].recycle(group);
           this.activeGroups.delete(key);
+          this.activeGroupsRevision++;
         }
       }
       // Unchanged: keep existing group (if any)
@@ -162,6 +172,7 @@ export class SceneReconciler {
         group = this.acquireGroup(el.kind, el, renderer);
         this.scene.add(group);
         this.activeGroups.set(el.key, group);
+        this.activeGroupsRevision++;
 
         // Apply selection/hover state to newly created group
         if (this.selectedKeys.has(el.key)) {
@@ -185,6 +196,7 @@ export class SceneReconciler {
           this.renderers[el.kind].recycle(group);
         }
         this.activeGroups.delete(key);
+        this.activeGroupsRevision++;
       }
     }
   }
@@ -263,6 +275,15 @@ export class SceneReconciler {
   /** Get all active (visible) groups. */
   getActiveGroups(): Map<string, THREE.Group> {
     return this.activeGroups;
+  }
+
+  /**
+   * Monotonically-increasing counter that bumps on every structural
+   * change to the active-groups map. Use this to invalidate caches that
+   * depend on the current set of active groups.
+   */
+  getActiveGroupsRevision(): number {
+    return this.activeGroupsRevision;
   }
 
   /** Get all elements sorted by msTime (for hit testing by position). */

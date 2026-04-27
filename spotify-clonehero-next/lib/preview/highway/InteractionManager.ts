@@ -62,15 +62,22 @@ export class InteractionManager {
   private getElapsedMs: () => number;
 
   /**
-   * Cached sprite lists for raycasting. Rebuilt when active groups change.
-   * Notes and markers are cached separately so each hit-test pass only
-   * raycasts against its own kind. Both share the group-count guard.
+   * Cached sprite lists for raycasting. Rebuilt when the reconciler's
+   * active-groups revision changes. Notes and markers are cached
+   * separately so each hit-test pass only raycasts against its own kind.
+   *
+   * Tracking by revision (not size) is required: when a hovered marker's
+   * data changes, the reconciler recycles the old group and `updateWindow`
+   * re-creates a new one at the same key, so the size returns to its
+   * prior value and a size-only check would happily reuse a stale sprite
+   * reference. The revision bumps on every add/delete, so any in-place
+   * replacement still invalidates the cache.
    */
   private cachedNoteSprites: THREE.Sprite[] = [];
   private cachedNoteSpriteToKey = new Map<THREE.Sprite, string>();
   private cachedMarkerSprites: THREE.Sprite[] = [];
   private cachedMarkerSpriteToKey = new Map<THREE.Sprite, string>();
-  private cachedGroupCount = -1;
+  private cachedGroupsRevision = -1;
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -149,20 +156,20 @@ export class InteractionManager {
   }
 
   /**
-   * Rebuild the per-kind sprite caches when the set of active groups
-   * changes. Cheap to run when the count is unchanged (early exit), so
+   * Rebuild the per-kind sprite caches when the reconciler's active-groups
+   * revision has advanced. Cheap to run on a hit (early exit), so
    * `hitTest()` calls it unconditionally on entry.
    */
   private rebuildSpriteCachesIfNeeded(): void {
-    const activeGroups = this.reconciler.getActiveGroups();
-    if (activeGroups.size === this.cachedGroupCount) return;
+    const revision = this.reconciler.getActiveGroupsRevision();
+    if (revision === this.cachedGroupsRevision) return;
 
     this.cachedNoteSprites.length = 0;
     this.cachedNoteSpriteToKey.clear();
     this.cachedMarkerSprites.length = 0;
     this.cachedMarkerSpriteToKey.clear();
 
-    for (const [key, group] of activeGroups) {
+    for (const [key, group] of this.reconciler.getActiveGroups()) {
       if (key.startsWith('note:')) {
         const sprite = NoteRenderer.getSprite(group);
         if (sprite) {
@@ -178,7 +185,7 @@ export class InteractionManager {
       }
     }
 
-    this.cachedGroupCount = activeGroups.size;
+    this.cachedGroupsRevision = revision;
   }
 
   /**
