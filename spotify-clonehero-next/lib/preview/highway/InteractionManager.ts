@@ -61,9 +61,15 @@ export class InteractionManager {
   /** Function to get current audio time in ms. */
   private getElapsedMs: () => number;
 
-  /** Cached sprite list for raycasting. Rebuilt when active groups change. */
-  private cachedSprites: THREE.Sprite[] = [];
-  private cachedSpriteToKey = new Map<THREE.Sprite, string>();
+  /**
+   * Cached sprite lists for raycasting. Rebuilt when active groups change.
+   * Notes and markers are cached separately so each hit-test pass only
+   * raycasts against its own kind. Both share the group-count guard.
+   */
+  private cachedNoteSprites: THREE.Sprite[] = [];
+  private cachedNoteSpriteToKey = new Map<THREE.Sprite, string>();
+  private cachedMarkerSprites: THREE.Sprite[] = [];
+  private cachedMarkerSpriteToKey = new Map<THREE.Sprite, string>();
   private cachedGroupCount = -1;
 
   constructor(
@@ -118,11 +124,13 @@ export class InteractionManager {
     this.ndcVec.set((canvasX / canvasW) * 2 - 1, -(canvasY / canvasH) * 2 + 1);
     this.raycaster.setFromCamera(this.ndcVec, this.camera);
 
+    this.rebuildSpriteCachesIfNeeded();
+
     // --- 1. Marker flag boxes (off-highway side rails) ---
     // The flag boxes sit outside the highway lanes, so they can't conflict
     // with notes. Picking them first means the side-mounted text always
     // responds to hover even if a note is at the same tick.
-    const flagHit = this.hitTestMarkerFlags(canvasX, canvasY, canvasW, canvasH);
+    const flagHit = this.hitTestMarkerFlags();
     if (flagHit) return flagHit;
 
     // --- 2. Notes ---
@@ -140,32 +148,62 @@ export class InteractionManager {
     return this.hitTestHighway(gridDivision);
   }
 
+  /**
+   * Rebuild the per-kind sprite caches when the set of active groups
+   * changes. Cheap to run when the count is unchanged (early exit), so
+   * `hitTest()` calls it unconditionally on entry.
+   */
+  private rebuildSpriteCachesIfNeeded(): void {
+    const activeGroups = this.reconciler.getActiveGroups();
+    if (activeGroups.size === this.cachedGroupCount) return;
+
+    this.cachedNoteSprites.length = 0;
+    this.cachedNoteSpriteToKey.clear();
+    this.cachedMarkerSprites.length = 0;
+    this.cachedMarkerSpriteToKey.clear();
+
+    for (const [key, group] of activeGroups) {
+      if (key.startsWith('note:')) {
+        const sprite = NoteRenderer.getSprite(group);
+        if (sprite) {
+          this.cachedNoteSprites.push(sprite);
+          this.cachedNoteSpriteToKey.set(sprite, key);
+        }
+      } else if (InteractionManager.markerPriority(key) >= 0) {
+        const sprite = MarkerRenderer.getFlagSprite(group);
+        if (sprite) {
+          this.cachedMarkerSprites.push(sprite);
+          this.cachedMarkerSpriteToKey.set(sprite, key);
+        }
+      }
+    }
+
+    this.cachedGroupCount = activeGroups.size;
+  }
+
+  /**
+   * Index of `key`'s prefix in MARKER_PRIORITY. Lower = higher priority.
+   * Returns -1 if the key isn't a marker.
+   */
+  private static markerPriority(key: string): number {
+    for (let i = 0; i < InteractionManager.MARKER_PRIORITY.length; i++) {
+      if (key.startsWith(InteractionManager.MARKER_PRIORITY[i])) return i;
+    }
+    return -1;
+  }
+
   // -----------------------------------------------------------------------
   // Note hit testing
   // -----------------------------------------------------------------------
 
   private hitTestNotes(): HitResult {
-    // Rebuild sprite cache only when active groups changed (after updateWindow)
-    const activeGroups = this.reconciler.getActiveGroups();
-    if (activeGroups.size !== this.cachedGroupCount) {
-      this.cachedSprites.length = 0;
-      this.cachedSpriteToKey.clear();
-      for (const [key, group] of activeGroups) {
-        const sprite = NoteRenderer.getSprite(group);
-        if (sprite) {
-          this.cachedSprites.push(sprite);
-          this.cachedSpriteToKey.set(sprite, key);
-        }
-      }
-      this.cachedGroupCount = activeGroups.size;
-    }
-    if (this.cachedSprites.length === 0) return null;
+    if (this.cachedNoteSprites.length === 0) return null;
 
-    const hits = this.raycaster.intersectObjects(this.cachedSprites, false);
+    const hits = this.raycaster.intersectObjects(this.cachedNoteSprites, false);
     if (hits.length === 0) return null;
 
     const hitSprite = hits[0].object as THREE.Sprite;
-    const key = this.cachedSpriteToKey.get(hitSprite);
+    const key = this.cachedNoteSpriteToKey.get(hitSprite);
     if (!key) return null;
 
     const el = this.reconciler.getElement(key);
@@ -202,9 +240,8 @@ export class InteractionManager {
   // `section:{tick}`, `lyric:{tick}`, `phrase-start:{tick}`,
   // `phrase-end:{endTick}`. Each renders as a horizontal line across the
   // highway plus a side-mounted text flag. The flag is the actual click
-  // target — we project its sprite to screen space (using its real scale,
-  // anchor, and stack offset) and check whether the cursor is inside the
-  // resulting box. The line beneath the flag also counts: a small
+  // target — Three.js's sprite raycaster catches a hit anywhere inside the
+  // billboarded quad. The line beneath the flag also counts: a small
   // tolerance around the row's Y matches anywhere on the rule.
   //
   // Within the marker tier, lyric wins over phrase-* (smallest target),
@@ -226,65 +263,43 @@ export class InteractionManager {
     'section:',
   ];
 
-  /** Hit-test only the side-mounted flag boxes (off the highway). */
-  private hitTestMarkerFlags(
-    canvasX: number,
-    canvasY: number,
-    canvasW: number,
-    canvasH: number,
-  ): HitResult {
-    if (this.timedTempos.length === 0) return null;
+  /**
+   * Hit-test only the side-mounted flag boxes (off the highway).
+   *
+   * Sprite raycasting uses Three.js's built-in `Sprite.raycast`, which
+   * tests against the screen-aligned billboard quad with the sprite's
+   * `center` anchor and `scale` applied — matching what the user sees.
+   * That avoids the perspective + billboard subtleties of projecting
+   * world-space corners back to screen pixels.
+   *
+   * Among hit sprites, pick the one with the highest priority
+   * (lyric > phrase-end > phrase-start > section). Distance order from
+   * the raycaster isn't reliable for picking between stacked markers
+   * because all flag sprites share the same depth.
+   */
+  private hitTestMarkerFlags(): HitResult {
+    if (this.cachedMarkerSprites.length === 0) return null;
 
-    const tempWorld = new THREE.Vector3();
+    const hits = this.raycaster.intersectObjects(
+      this.cachedMarkerSprites,
+      false,
+    );
+    if (hits.length === 0) return null;
 
-    for (const prefix of InteractionManager.MARKER_PRIORITY) {
-      for (const [key, group] of this.reconciler.getActiveGroups()) {
-        if (!key.startsWith(prefix)) continue;
-
-        const sprite = MarkerRenderer.getFlagSprite(group);
-        if (!sprite) continue;
-
-        // Sprite center in world space = group.position + sprite.position.
-        sprite.getWorldPosition(tempWorld);
-        const projected = tempWorld.project(this.camera);
-        const spriteScreenX = ((projected.x + 1) / 2) * canvasW;
-        const spriteScreenY = ((-projected.y + 1) / 2) * canvasH;
-
-        // Sprite scale is in world units; convert to screen pixels by
-        // projecting two world points along its width/height.
-        const scaleW = sprite.scale.x;
-        const scaleH = sprite.scale.y;
-        const right = tempWorld
-          .clone()
-          .setX(tempWorld.x + scaleW / 2)
-          .project(this.camera);
-        const top = tempWorld
-          .clone()
-          .setY(tempWorld.y + scaleH / 2)
-          .project(this.camera);
-        const halfW = (((right.x - projected.x) * canvasW) / 2) | 0;
-        const halfH = (((projected.y - top.y) * canvasH) / 2) | 0;
-
-        // Sprite anchor (sprite.center): right side anchors at the left
-        // edge of the box (center.x = 0.0), left side at the right edge
-        // (center.x = 1.0). Translate the projected sprite-center pixel
-        // into the box's pixel center.
-        const anchorOffsetX = ((sprite.center.x - 0.5) * 2 * halfW) | 0;
-        const boxCenterX = spriteScreenX - anchorOffsetX;
-        const boxCenterY = spriteScreenY;
-
-        if (
-          Math.abs(canvasX - boxCenterX) > halfW ||
-          Math.abs(canvasY - boxCenterY) > halfH
-        ) {
-          continue;
-        }
-
-        const hit = this.elementToMarkerHit(key);
-        if (hit) return hit;
+    let bestKey: string | null = null;
+    let bestPriority = Infinity;
+    for (const hit of hits) {
+      const key = this.cachedMarkerSpriteToKey.get(hit.object as THREE.Sprite);
+      if (!key) continue;
+      const priority = InteractionManager.markerPriority(key);
+      if (priority < 0) continue;
+      if (priority < bestPriority) {
+        bestKey = key;
+        bestPriority = priority;
       }
     }
-    return null;
+    if (!bestKey) return null;
+    return this.elementToMarkerHit(bestKey);
   }
 
   /** Hit-test only the marker rule lines that cross the highway. */
