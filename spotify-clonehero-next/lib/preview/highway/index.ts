@@ -110,10 +110,19 @@ export const setupRenderer = (
 
   const textureLoader = new THREE.TextureLoader();
 
+  // highwayBeginningPlane (normal +Y, const 1) clips y < -1 — the bottom
+  // of the highway near the strikeline / hitline. Notes need this so they
+  // disappear when they cross the hitline.
+  // highwayEndPlane (normal -Y, const 0.9) clips y > 0.9 — the far end
+  // (top of the visible highway). Both notes and markers want this so
+  // nothing bleeds out the top.
+  // Markers (BPM, time-signature, section, lyric, phrase-start/end) keep
+  // only the top clip so their labels can extend past the hitline to the
+  // bottom edge of the canvas instead of being chopped at y=-1.
   const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
   const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
   const noteClippingPlanes = [highwayBeginningPlane, highwayEndPlane];
-  const markerClippingPlanes = [highwayBeginningPlane];
+  const markerClippingPlanes = [highwayEndPlane];
 
   async function initialize() {
     const highwayTexture: THREE.Texture =
