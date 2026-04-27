@@ -21,11 +21,14 @@ export interface ChartElement {
  * Pluggable renderer that knows how to create/recycle Three.js groups
  * for a particular element kind.
  *
- * `setHovered` and `setSelected` are optional in-place transitions: the
- * renderer mutates the existing group rather than recycling it. Renderers
- * without these hooks fall back to the recycle path — element data carrying
- * `isHovered`/`isSelected` and changing across emits will still trigger
- * recycle (graceful degradation; not the target).
+ * `setHovered` and `setSelected` are in-place transitions: the renderer
+ * mutates the existing group rather than recycling it. They are typed
+ * optional only so test-fixture renderers that don't care about hover or
+ * selection can omit them; every production renderer in this repo
+ * implements both. If a renderer omits a hook and element data ever
+ * carries `isHovered`/`isSelected` flags that change, the reconciler
+ * falls back to recycle — that path exists for fixtures, not as a
+ * runtime target.
  */
 export interface ElementRenderer<T = unknown> {
   /** Create a new Three.js group for this element. */
@@ -75,6 +78,15 @@ export class SceneReconciler {
   /** Reusable set for updateWindow -- cleared and reused each frame. */
   private inWindowSet = new Set<string>();
 
+  /**
+   * Total number of `recycle()` calls dispatched to renderers since
+   * construction (or the last `resetRecycleCount`). Used to validate the
+   * "no recycle for hover/select/drag" invariant in tests and during
+   * browser smoke checks. Counts every recycle path: removed elements,
+   * changed elements, scrolled-out windowing, and dispose cleanup.
+   */
+  private recycleCount = 0;
+
   /** Currently selected element keys. */
   private selectedKeys = new Set<string>();
   /** Currently hovered element key. */
@@ -111,7 +123,7 @@ export class SceneReconciler {
         const group = this.activeGroups.get(key);
         if (group) {
           this.scene.remove(group);
-          this.renderers[oldEl.kind].recycle(group);
+          this.recycleGroup(oldEl.kind, group);
           this.activeGroups.delete(key);
           this.activeGroupsRevision++;
         }
@@ -126,7 +138,7 @@ export class SceneReconciler {
         const group = this.activeGroups.get(key);
         if (group) {
           this.scene.remove(group);
-          this.renderers[oldEl.kind].recycle(group);
+          this.recycleGroup(oldEl.kind, group);
           this.activeGroups.delete(key);
           this.activeGroupsRevision++;
         }
@@ -195,7 +207,7 @@ export class SceneReconciler {
         this.scene.remove(group);
         const el = this.elements.get(key);
         if (el) {
-          this.renderers[el.kind].recycle(group);
+          this.recycleGroup(el.kind, group);
         }
         this.activeGroups.delete(key);
         this.activeGroupsRevision++;
@@ -318,7 +330,7 @@ export class SceneReconciler {
       this.scene.remove(group);
       const el = this.elements.get(key);
       if (el) {
-        this.renderers[el.kind].recycle(group);
+        this.recycleGroup(el.kind, group);
       }
     }
     this.activeGroups.clear();
@@ -328,9 +340,34 @@ export class SceneReconciler {
     this.hoveredKey = null;
   }
 
+  /**
+   * Number of `recycle()` calls dispatched since construction or the last
+   * `resetRecycleCount()`. The plan-0040 invariant is "0 recycles during
+   * hover, select, or drag" while the visible window is stable; tests pin
+   * this and a temporary counter reset around an interaction sequence is
+   * the cheapest way to validate it in the browser.
+   */
+  getRecycleCount(): number {
+    return this.recycleCount;
+  }
+
+  /** Reset the recycle counter to 0. */
+  resetRecycleCount(): void {
+    this.recycleCount = 0;
+  }
+
   // -----------------------------------------------------------------------
   // Internal helpers
   // -----------------------------------------------------------------------
+
+  /**
+   * Single funnel for renderer.recycle calls. Bumps the recycle counter
+   * so callers can audit the "0 recycles for hover/select/drag" invariant.
+   */
+  private recycleGroup(kind: string, group: THREE.Group): void {
+    this.renderers[kind].recycle(group);
+    this.recycleCount++;
+  }
 
   /**
    * Data equality check. Two elements are equal if they have

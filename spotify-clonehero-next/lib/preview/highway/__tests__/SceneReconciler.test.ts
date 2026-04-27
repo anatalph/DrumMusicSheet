@@ -850,6 +850,86 @@ describe('SceneReconciler', () => {
   });
 
   // -----------------------------------------------------------------------
+  // recycle counter
+  // -----------------------------------------------------------------------
+
+  describe('recycle counter', () => {
+    it('starts at 0 and counts every recycle', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      expect(reconciler.getRecycleCount()).toBe(0);
+
+      reconciler.setElements([el('note:0', 100)]);
+      reconciler.updateWindow(0);
+      expect(reconciler.getRecycleCount()).toBe(0);
+
+      // Remove the element → 1 recycle
+      reconciler.setElements([]);
+      expect(reconciler.getRecycleCount()).toBe(1);
+    });
+
+    it('hover/select toggle on a stable window: 0 recycles', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      reconciler.setElements([
+        el('note:0', 100),
+        el('note:1', 200),
+        el('note:2', 300),
+      ]);
+      reconciler.updateWindow(0);
+      reconciler.resetRecycleCount();
+
+      reconciler.setHoveredKey('note:0');
+      reconciler.setHoveredKey('note:1');
+      reconciler.setSelectedKeys(new Set(['note:0', 'note:1']));
+      reconciler.setSelectedKeys(new Set(['note:2']));
+      reconciler.setHoveredKey(null);
+      reconciler.setSelectedKeys(new Set());
+
+      expect(reconciler.getRecycleCount()).toBe(0);
+    });
+
+    it('drag-only msTime change: 0 recycles', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {marker: renderer}, 1.5);
+
+      const data = {text: 'verse'};
+      reconciler.setElements([el('marker:480', 500, data, 'marker')]);
+      reconciler.updateWindow(0);
+      reconciler.resetRecycleCount();
+
+      // Simulate 60 frames of drag at 16ms
+      for (let i = 0; i < 60; i++) {
+        reconciler.setElements([
+          el('marker:480', 500 + i * 5, data, 'marker'),
+        ]);
+        reconciler.updateWindow(0);
+      }
+
+      expect(reconciler.getRecycleCount()).toBe(0);
+    });
+
+    it('resetRecycleCount sets the counter to 0', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      reconciler.setElements([el('note:0', 100)]);
+      reconciler.updateWindow(0);
+      reconciler.setElements([]);
+      expect(reconciler.getRecycleCount()).toBe(1);
+
+      reconciler.resetRecycleCount();
+      expect(reconciler.getRecycleCount()).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // getElement / getElements
   // -----------------------------------------------------------------------
 

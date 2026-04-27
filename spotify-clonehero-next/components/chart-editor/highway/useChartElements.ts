@@ -24,7 +24,10 @@
 
 import {useEffect, type RefObject} from 'react';
 import type {parseChartFile} from '@eliwhite/scan-chart';
-import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
+import type {
+  ChartElement,
+  SceneReconciler,
+} from '@/lib/preview/highway/SceneReconciler';
 
 /**
  * Parser-shape ParsedChart. Differs from scan-chart's wrapper type in
@@ -38,21 +41,14 @@ import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import {findTrackInParsedChart} from '@/lib/chart-edit';
 import {chartToElements} from '@/lib/preview/highway/chartToElements';
-import {chartMarkerKey, vocalMarkerKey} from '@/lib/preview/highway/markerKeys';
-import {reconcilerKeyFor} from '@/lib/preview/highway/reconcilerKey';
+import {
+  markerDragReconcilerKey,
+  reconcilerKeyFor,
+} from '@/lib/preview/highway/reconcilerKey';
 import type {EditorCapabilities} from '../capabilities';
 import type {EditorScope} from '../scope';
 import {trackKeyFromScope} from '../scope';
 import type {MarkerKind} from './useMarkerDrag';
-
-function markerDragReconcilerKey(
-  kind: MarkerKind,
-  tick: number,
-  partName: string,
-): string {
-  if (kind === 'section') return chartMarkerKey('section', tick);
-  return vocalMarkerKey(kind, partName, tick);
-}
 
 export interface MarkerDragHint {
   kind: MarkerKind;
@@ -79,6 +75,74 @@ export interface UseChartElementsInputs {
   markerDrag: MarkerDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
+}
+
+/**
+ * Pure inputs for `computeChartElements`. The element-set computation is
+ * factored out as a side-effect-free function so it can be unit-tested
+ * directly without renderHook + a mocked reconciler.
+ */
+export interface ComputeChartElementsInputs {
+  chart: ParsedChart;
+  activeScope: EditorScope;
+  partName: string;
+  capabilities: EditorCapabilities;
+  markerDrag: MarkerDragHint | null;
+  timedTempos: TimedTempo[];
+  resolution: number;
+}
+
+/**
+ * Pure: derive the `ChartElement[]` to push to the reconciler from the
+ * current chart + capabilities + marker-drag hint. No React, no refs.
+ *
+ * Drag handling: when a marker is being dragged, its element is rewritten
+ * with a live `msTime` derived from `markerDrag.currentTick`. The
+ * reconciler's `dataEqual` ignores `msTime`, so this becomes a
+ * reposition-only update — no recycle, no key churn.
+ *
+ * Lane-axis (note) drags don't appear here: notes are committed through
+ * the command pipeline before the next push, so the reconciler always
+ * sees their final position.
+ */
+export function computeChartElements(
+  inputs: ComputeChartElementsInputs,
+): ChartElement[] {
+  const {
+    chart,
+    activeScope,
+    partName,
+    capabilities,
+    markerDrag,
+    timedTempos,
+    resolution,
+  } = inputs;
+  const trackKey = trackKeyFromScope(activeScope);
+  const track = trackKey
+    ? (findTrackInParsedChart(chart, trackKey)?.track ?? null)
+    : null;
+  const elements = chartToElements(chart, track, partName);
+
+  const dragKey = markerDrag
+    ? markerDragReconcilerKey(
+        markerDrag.kind,
+        markerDrag.originalTick,
+        partName,
+      )
+    : null;
+  const dragMs =
+    markerDrag && timedTempos.length > 0
+      ? tickToMs(markerDrag.currentTick, timedTempos, resolution)
+      : null;
+
+  return elements
+    .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
+    .map(e => {
+      if (dragKey === e.key && dragMs !== null) {
+        return {...e, msTime: dragMs};
+      }
+      return e;
+    });
 }
 
 /**
@@ -109,34 +173,17 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
   useEffect(() => {
     const reconciler = reconcilerRef.current;
     if (!reconciler || !chart) return;
-    const trackKey = trackKeyFromScope(activeScope);
-    const track = trackKey
-      ? (findTrackInParsedChart(chart, trackKey)?.track ?? null)
-      : null;
-    const elements = chartToElements(chart, track, partName);
-
-    const dragKey = markerDrag
-      ? markerDragReconcilerKey(
-          markerDrag.kind,
-          markerDrag.originalTick,
-          partName,
-        )
-      : null;
-    const dragMs =
-      markerDrag && timedTempos.length > 0
-        ? tickToMs(markerDrag.currentTick, timedTempos, resolution)
-        : null;
-
-    const visible = elements
-      .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
-      .map(e => {
-        if (dragKey === e.key && dragMs !== null) {
-          return {...e, msTime: dragMs};
-        }
-        return e;
-      });
-
-    reconciler.setElements(visible);
+    reconciler.setElements(
+      computeChartElements({
+        chart,
+        activeScope,
+        partName,
+        capabilities,
+        markerDrag,
+        timedTempos,
+        resolution,
+      }),
+    );
   }, [
     reconcilerRef,
     rendererVersion,

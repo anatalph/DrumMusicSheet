@@ -351,17 +351,18 @@ export function useHighwayMouseInteraction(
 
             // Drag init: gated on the page's draggable capability. Notes
             // start a multi-note drag; markers start a single-entity drag
-            // through the existing `useMarkerDrag` handler.
+            // through the existing `useMarkerDrag` handler. Both pin hover
+            // to the dragged entity so the highlight stays put even if the
+            // mousedown landed without a prior mousemove (focus-shift,
+            // touch tap-and-drag).
             if (capabilities.draggable.has(entity.kind)) {
+              dispatch({
+                type: 'SET_HOVER',
+                hovered: {kind: entity.kind, id: entity.id},
+              });
               if (entity.kind === 'note') {
                 setIsDragging(true);
               } else {
-                // Pin hover to the dragged marker (relocation of the
-                // existing !markerDrag guard).
-                dispatch({
-                  type: 'SET_HOVER',
-                  hovered: {kind: entity.kind, id: entity.id},
-                });
                 beginMarkerDrag(entity.kind as MarkerKind, entity.tick);
               }
             }
