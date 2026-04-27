@@ -16,6 +16,46 @@ const CANVAS_WIDTH = 512;
 /** Waveform line colour (light grey, like Moonscraper). */
 const WAVE_COLOR = 'rgba(200, 200, 200, 0.7)';
 
+/**
+ * Fraction of the canvas half-width the loudest sample should reach (per side).
+ * 0.8 means the global peak renders at 80% of the highway width per side, so
+ * the symmetric waveform fills 80% of the highway width at its loudest point.
+ */
+const PEAK_FILL_RATIO = 0.8;
+
+/**
+ * Compute the global peak amplitude (absolute value) across all samples and
+ * channels in a PCM buffer. Returns 0 if the buffer is silent or empty.
+ *
+ * Pulled out as a pure helper so the normalization math is unit-testable.
+ */
+export function computeGlobalPeak(audioData: Float32Array): number {
+  let peak = 0;
+  for (let i = 0; i < audioData.length; i++) {
+    const v = audioData[i];
+    const abs = v < 0 ? -v : v;
+    if (abs > peak) peak = abs;
+  }
+  return peak;
+}
+
+/**
+ * Compute the half-width (in pixels, from the canvas centre line) for a row
+ * given the row's local peak amplitude, the global peak, and the canvas
+ * half-width. Caller is responsible for clamping/skipping sub-pixel rows.
+ *
+ * If `globalPeak` is 0 (silent audio), returns 0 — render nothing.
+ */
+export function computeRowHalfWidth(
+  rowPeak: number,
+  globalPeak: number,
+  canvasHalfWidth: number,
+): number {
+  if (globalPeak <= 0) return 0;
+  const normalized = rowPeak / globalPeak;
+  return normalized * canvasHalfWidth * PEAK_FILL_RATIO;
+}
+
 export interface WaveformSurfaceConfig {
   /** Raw interleaved PCM audio data. */
   audioData: Float32Array;
@@ -51,12 +91,21 @@ export class WaveformSurface {
   private durationMs: number;
   private highwaySpeed: number;
   private lastRenderedMs = -1;
+  /**
+   * Loudest absolute sample value across the entire audio buffer. Used to
+   * normalize the per-row amplitudes so the visual peak fills a consistent
+   * fraction of the highway regardless of overall loudness. Computed once at
+   * construction with a single pass over the PCM (a few hundred ms for a
+   * 4-minute stereo song at 48kHz).
+   */
+  private globalPeak: number;
 
   constructor(config: WaveformSurfaceConfig) {
     this.audioData = config.audioData;
     this.channels = config.channels;
     this.durationMs = config.durationMs;
     this.highwaySpeed = config.highwaySpeed;
+    this.globalPeak = computeGlobalPeak(config.audioData);
 
     // Derive sample rate from total samples and duration
     const totalSamples = config.audioData.length / config.channels;
@@ -179,9 +228,12 @@ export class WaveformSurface {
         }
       }
 
-      // Map amplitude to pixel width from center, capped at 50% highway width
+      // Normalize against the global peak so the loudest sample in the song
+      // fills PEAK_FILL_RATIO of the highway half-width. Quiet sections still
+      // remain proportionally smaller, but loud sections reliably fill the
+      // highway instead of being clipped to a fraction of it.
       const peak = Math.max(Math.abs(minVal), Math.abs(maxVal));
-      const halfWidth = peak * centerX * 0.5;
+      const halfWidth = computeRowHalfWidth(peak, this.globalPeak, centerX);
 
       if (halfWidth < 0.5) continue;
 
