@@ -112,7 +112,8 @@ export const setupRenderer = (
 
   const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
   const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
-  const clippingPlanes = [highwayBeginningPlane, highwayEndPlane];
+  const noteClippingPlanes = [highwayBeginningPlane, highwayEndPlane];
+  const markerClippingPlanes = [highwayBeginningPlane];
 
   async function initialize() {
     const highwayTexture: THREE.Texture =
@@ -315,7 +316,7 @@ export const setupRenderer = (
         highwayWidth: 0.9,
         highwaySpeed,
       };
-      gridOverlay = createGridOverlay(scene, fullConfig, clippingPlanes);
+      gridOverlay = createGridOverlay(scene, fullConfig, noteClippingPlanes);
 
       // Grid lines always visible (both classic and waveform modes)
       gridOverlay.setVisible(true);
@@ -400,36 +401,39 @@ export const setupRenderer = (
     );
 
     // Create NoteRenderer for the reconciler
-    const noteRenderer = new NoteRenderer(getTextureForNote, clippingPlanes);
+    const noteRenderer = new NoteRenderer(
+      getTextureForNote,
+      noteClippingPlanes,
+    );
 
     // Create marker renderers for all marker types
     const sectionRenderer = new MarkerRenderer(
-      clippingPlanes,
+      markerClippingPlanes,
       'right',
       [0, 200, 40],
     );
     const lyricRenderer = new MarkerRenderer(
-      clippingPlanes,
+      markerClippingPlanes,
       'left',
       [40, 120, 255],
     );
     const phraseStartRenderer = new MarkerRenderer(
-      clippingPlanes,
+      markerClippingPlanes,
       'left',
       [40, 120, 255],
     );
     const phraseEndRenderer = new MarkerRenderer(
-      clippingPlanes,
+      markerClippingPlanes,
       'left',
       [40, 120, 255],
     );
     const bpmRenderer = new MarkerRenderer(
-      clippingPlanes,
+      markerClippingPlanes,
       'left',
       [180, 40, 255],
     );
     const tsRenderer = new MarkerRenderer(
-      clippingPlanes,
+      markerClippingPlanes,
       'right',
       [255, 80, 60],
     );
@@ -464,7 +468,7 @@ export const setupRenderer = (
     const sceneOverlays = new SceneOverlays(
       scene,
       highwaySpeed,
-      clippingPlanes,
+      noteClippingPlanes,
     );
 
     const getElapsedMs = () => {
