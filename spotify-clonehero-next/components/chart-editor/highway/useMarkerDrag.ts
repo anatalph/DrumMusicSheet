@@ -163,46 +163,48 @@ export function useMarkerDrag(
 
   const commitMarkerDrag = useCallback(
     (moveExceededThreshold: boolean) => {
-      // Read state functionally so we don't re-create this callback on every
-      // markerDrag change, but still observe the latest value.
-      setMarkerDrag(prev => {
-        if (!prev) return null;
-        const moved =
-          moveExceededThreshold && prev.currentTick !== prev.originalTick;
-        if (moved) {
-          const tickDelta = prev.currentTick - prev.originalTick;
-          const originalId = markerEntityId(
-            prev.kind,
-            prev.originalTick,
-            activePartName,
-          );
-          const currentId = markerEntityId(
-            prev.kind,
-            prev.currentTick,
-            activePartName,
-          );
-          executeCommand(
-            new MoveEntitiesCommand(
-              prev.kind,
-              [originalId],
-              tickDelta,
-              0,
-              entityContextFromScope(activeScope),
-            ),
-          );
-          // Keep selection on the moved entity using its new id. Handlers
-          // clamp on overshoot, so the actual id may differ; we re-derive
-          // it here on a best-effort basis.
-          dispatch({
-            type: 'SET_SELECTION',
-            kind: prev.kind,
-            ids: new Set([currentId]),
-          });
-        }
-        return null;
-      });
+      // Side effects must happen *outside* the setState updater so React
+      // doesn't see a dispatch into another component during the render
+      // phase (strict-mode replays the updater and would re-fire the
+      // command otherwise). Read markerDrag from the closure, run the
+      // command + selection dispatch synchronously, then clear the drag.
+      if (!markerDrag) return;
+      const moved =
+        moveExceededThreshold &&
+        markerDrag.currentTick !== markerDrag.originalTick;
+      if (moved) {
+        const tickDelta = markerDrag.currentTick - markerDrag.originalTick;
+        const originalId = markerEntityId(
+          markerDrag.kind,
+          markerDrag.originalTick,
+          activePartName,
+        );
+        const currentId = markerEntityId(
+          markerDrag.kind,
+          markerDrag.currentTick,
+          activePartName,
+        );
+        executeCommand(
+          new MoveEntitiesCommand(
+            markerDrag.kind,
+            [originalId],
+            tickDelta,
+            0,
+            entityContextFromScope(activeScope),
+          ),
+        );
+        // Keep selection on the moved entity using its new id. Handlers
+        // clamp on overshoot, so the actual id may differ; we re-derive
+        // it here on a best-effort basis.
+        dispatch({
+          type: 'SET_SELECTION',
+          kind: markerDrag.kind,
+          ids: new Set([currentId]),
+        });
+      }
+      setMarkerDrag(null);
     },
-    [activeScope, activePartName, executeCommand, dispatch],
+    [markerDrag, activeScope, activePartName, executeCommand, dispatch],
   );
 
   const cancelMarkerDrag = useCallback(() => {
