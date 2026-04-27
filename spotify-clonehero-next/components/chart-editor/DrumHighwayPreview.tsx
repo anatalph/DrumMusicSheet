@@ -41,6 +41,15 @@ export interface HighwayRendererHandle {
   setGridData(
     config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>,
   ): Promise<void>;
+  /**
+   * Push fresh karaoke lyrics + vocal phrases. Called whenever the
+   * editor's chartDoc updates (lyric flag drag, lyric edit, etc.).
+   * Lazy-creates the lyrics overlay when the original chart had none.
+   */
+  setLyricsData(
+    lyrics: {msTime: number; text: string; msLength?: number}[],
+    vocalPhrases: {msTime: number; msLength: number}[],
+  ): Promise<void>;
   /** Switch between 'classic' and 'waveform' highway modes. */
   setHighwayMode(mode: HighwayMode): void;
   /** Get the current highway display mode. */
@@ -155,6 +164,8 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       getNoteRenderer: () => renderer.getNoteRenderer(),
       setWaveformData: config => renderer.setWaveformData(config),
       setGridData: config => renderer.setGridData(config),
+      setLyricsData: (lyrics, vocalPhrases) =>
+        renderer.setLyricsData(lyrics, vocalPhrases),
       setHighwayMode: mode => renderer.setHighwayMode(mode),
       getHighwayMode: () => renderer.getHighwayMode(),
     });

@@ -225,6 +225,7 @@ export default function HighwayEditor({
     durationSeconds,
     timedTempos,
     resolution,
+    partName: activePartName,
     audioData,
     audioChannels,
     highwayMode: state.highwayMode,

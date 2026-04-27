@@ -1,4 +1,86 @@
-import {LyricsState, TRANSITION_DURATION_MS} from '../LyricsOverlay';
+// Mock THREE before importing LyricsOverlay (the class instantiates THREE
+// objects in its constructor; LyricsState alone doesn't need them).
+jest.mock('three', () => {
+  class MockObject3D {
+    children: unknown[] = [];
+    position = {x: 0, y: 0, z: 0, set: jest.fn()};
+    scale = {x: 1, y: 1, z: 1, set: jest.fn()};
+    visible = true;
+    add(c: unknown) {
+      this.children.push(c);
+    }
+    remove(c: unknown) {
+      const i = this.children.indexOf(c);
+      if (i >= 0) this.children.splice(i, 1);
+    }
+  }
+  return {
+    Scene: class extends MockObject3D {},
+    Group: class extends MockObject3D {},
+    Mesh: class extends MockObject3D {
+      geometry: {dispose: jest.Mock};
+      material: any;
+      constructor(geometry: any, material: any) {
+        super();
+        this.geometry = geometry ?? {dispose: jest.fn()};
+        this.material = material ?? null;
+      }
+    },
+    OrthographicCamera: jest.fn(),
+    CanvasTexture: class {
+      image: unknown;
+      minFilter = 0;
+      magFilter = 0;
+      needsUpdate = false;
+      constructor(canvas: unknown) {
+        this.image = canvas;
+      }
+      dispose() {}
+    },
+    MeshBasicMaterial: jest.fn().mockImplementation((opts: any = {}) => ({
+      map: opts.map ?? null,
+      transparent: opts.transparent ?? false,
+      depthTest: opts.depthTest ?? true,
+      opacity: 1,
+      dispose: jest.fn(),
+    })),
+    PlaneGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
+    LinearFilter: 'linear',
+  };
+});
+
+beforeAll(() => {
+  if (typeof window === 'undefined') {
+    (global as any).window = {devicePixelRatio: 1};
+  }
+  if (typeof document === 'undefined') {
+    (global as any).document = {
+      createElement: () => ({
+        width: 100,
+        height: 50,
+        getContext: () => ({
+          font: '',
+          measureText: () => ({width: 50}),
+          fillRect: jest.fn(),
+          strokeRect: jest.fn(),
+          fillText: jest.fn(),
+          clearRect: jest.fn(),
+          fillStyle: '',
+          strokeStyle: '',
+          lineWidth: 0,
+          textAlign: '',
+          textBaseline: '',
+        }),
+      }),
+    };
+  }
+});
+
+import {
+  LyricsOverlay,
+  LyricsState,
+  TRANSITION_DURATION_MS,
+} from '../LyricsOverlay';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 
 // ---------------------------------------------------------------------------
@@ -356,5 +438,96 @@ describe('LyricsState', () => {
       expect(snap.lineIndex).toBe(0);
       expect(snap.opacity).toBe(1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LyricsOverlay.setLyrics — re-parse + swap state on chart edit
+// ---------------------------------------------------------------------------
+
+describe('LyricsOverlay.setLyrics', () => {
+  function lyricsArgs(times: number[]) {
+    return times.map(t => ({msTime: t, text: `w${t}`}));
+  }
+  function phrasesArgs(spans: [number, number][]) {
+    return spans.map(([msTime, msLength]) => ({msTime, msLength}));
+  }
+
+  it('initial parse is reflected in state.lines', () => {
+    const overlay = new LyricsOverlay(
+      lyricsArgs([1000, 1500]),
+      phrasesArgs([[1000, 2000]]),
+      800,
+      600,
+    );
+    expect(overlay.state.lines).toHaveLength(1);
+    expect(overlay.state.lines[0].syllables).toHaveLength(2);
+  });
+
+  it('setLyrics swaps in a new LyricsState with the new parse', () => {
+    const overlay = new LyricsOverlay(
+      lyricsArgs([1000, 1500]),
+      phrasesArgs([[1000, 2000]]),
+      800,
+      600,
+    );
+    const before = overlay.state;
+
+    // Move both lyrics later — same shape, new timing.
+    overlay.setLyrics(lyricsArgs([2000, 2500]), phrasesArgs([[2000, 2000]]));
+
+    expect(overlay.state).not.toBe(before);
+    expect(overlay.state.lines).toHaveLength(1);
+    expect(overlay.state.lines[0].syllables[0].msTime).toBe(2000);
+    expect(overlay.state.lines[0].syllables[1].msTime).toBe(2500);
+  });
+
+  it('setLyrics handles a complete change (different number of lines)', () => {
+    const overlay = new LyricsOverlay(
+      lyricsArgs([1000]),
+      phrasesArgs([[1000, 1000]]),
+      800,
+      600,
+    );
+    expect(overlay.state.lines).toHaveLength(1);
+
+    overlay.setLyrics(
+      lyricsArgs([1000, 4000]),
+      phrasesArgs([
+        [1000, 1500],
+        [4000, 1500],
+      ]),
+    );
+    expect(overlay.state.lines).toHaveLength(2);
+  });
+
+  it('setLyrics([]) yields hasLyrics=false', () => {
+    const overlay = new LyricsOverlay(
+      lyricsArgs([1000]),
+      phrasesArgs([[1000, 1000]]),
+      800,
+      600,
+    );
+    expect(overlay.hasLyrics).toBe(true);
+    overlay.setLyrics([], []);
+    expect(overlay.hasLyrics).toBe(false);
+  });
+
+  it('subsequent state.update reflects the swapped lines (no stale cursor)', () => {
+    const overlay = new LyricsOverlay(
+      lyricsArgs([1000]),
+      phrasesArgs([[1000, 1000]]),
+      800,
+      600,
+    );
+    // Advance into the original phrase.
+    overlay.state.update(1500);
+
+    // Move the lyric later. The old timing said "in phrase at 1500ms";
+    // the new timing puts the same phrase at 5000ms, so 1500ms is now
+    // before any line.
+    overlay.setLyrics(lyricsArgs([5000]), phrasesArgs([[5000, 1000]]));
+    const snap = overlay.state.update(1500);
+    expect(snap.lineIndex).toBe(-1);
   });
 });

@@ -346,7 +346,11 @@ function lerpColor(
 export class LyricsOverlay {
   readonly scene: THREE.Scene;
   readonly camera: THREE.OrthographicCamera;
-  readonly state: LyricsState;
+  /**
+   * Mutable so the editor can swap the parsed lines after a chart edit
+   * (e.g. moving a lyric flag). `setLyrics` is the only writer.
+   */
+  state: LyricsState;
 
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -403,6 +407,24 @@ export class LyricsOverlay {
 
   get hasLyrics(): boolean {
     return this.state.lines.length > 0;
+  }
+
+  /**
+   * Replace the parsed line set after a chart edit. Re-parses lyrics
+   * against vocal phrases and swaps `state` for a fresh `LyricsState`.
+   * Resets the change-detection cursor so the next `update()` redraws
+   * unconditionally; in-flight slide/fade transitions reset (the next
+   * line transition will start from scratch on the new timing).
+   */
+  setLyrics(
+    lyrics: {msTime: number; text: string; msLength?: number}[],
+    vocalPhrases: {msTime: number; msLength: number}[],
+  ): void {
+    this.state = new LyricsState(parseLyrics(lyrics, vocalPhrases));
+    this.prevLineIndex = -1;
+    this.prevSyllableIndex = -1;
+    this.prevTransitionProgress = -1;
+    this.needsRedraw = true;
   }
 
   /**

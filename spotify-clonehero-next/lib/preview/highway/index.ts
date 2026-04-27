@@ -340,6 +340,34 @@ export const setupRenderer = (
     getHighwayMode(): HighwayMode {
       return highwayMode;
     },
+
+    /**
+     * Push fresh karaoke lyrics + vocal phrases. Called whenever the
+     * editor's `parsedChart` updates (lyric flag drag, lyric edit, etc.).
+     * Lazy-creates the overlay when the original chart had no lyrics but
+     * the user has added at least one — mirrors the prepTrack path.
+     */
+    async setLyricsData(
+      lyrics: {msTime: number; text: string; msLength?: number}[],
+      vocalPhrases: {msTime: number; msLength: number}[],
+    ): Promise<void> {
+      // Wait for prepTrack to finish so we don't race the initial overlay
+      // construction. We don't need the resolved value, only the timing.
+      await trackPromise;
+      if (lyricsOverlay) {
+        lyricsOverlay.setLyrics(lyrics, vocalPhrases);
+        return;
+      }
+      if (lyrics.length === 0) return;
+      const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
+      const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
+      lyricsOverlay = new LyricsOverlay(
+        lyrics,
+        vocalPhrases,
+        width,
+        height,
+      );
+    },
   };
 
   return methods;
