@@ -150,6 +150,16 @@ export const setupRenderer = (
   const methods = {
     prepTrack(track: Track) {
       const scene = new THREE.Scene();
+      // Black fog fades far-end fragments toward black against the black
+      // canvas background, matching Clone Hero / YARG's gradient fade-in
+      // at the top of the highway. Distances measured from the camera at
+      // (z=0.8, y=-1.3): strikeline ~0.85, mid-highway ~1.53, top edge
+      // ~2.34. Start the fade past the midpoint and finish just past the
+      // visible top so notes appear fully invisible by the time they
+      // reach the world clip plane. Built-in materials (SpriteMaterial,
+      // MeshBasicMaterial, etc.) default to fog: true; nothing else to
+      // wire up.
+      scene.fog = new THREE.Fog(0x000000, 1.6, 2.4);
       trackPromise = prepTrack(scene, track);
       return trackPromise;
     },
