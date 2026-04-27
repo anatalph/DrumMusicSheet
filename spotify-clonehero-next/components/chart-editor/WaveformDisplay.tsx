@@ -169,7 +169,7 @@ export default function WaveformDisplay({
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [audioManager, durationSeconds, drawWaveform]);
 
-  // Click to seek
+  // Click to seek — preserves play/pause state.
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
@@ -182,7 +182,7 @@ export default function WaveformDisplay({
         0,
         Math.min(durationSeconds, progress * durationSeconds),
       );
-      audioManager.play({time});
+      audioManager.seekTo(time);
     },
     [audioManager, durationSeconds],
   );

@@ -461,6 +461,53 @@ export class AudioManager {
     return this.play({time: chartTimeSec + this.#chartDelay});
   }
 
+  /**
+   * Seek to a position without changing playback state.
+   * - If currently playing: keeps playing from the new position.
+   * - If paused/uninitialized: updates currentTime to the new position
+   *   and rebuilds source nodes so a subsequent resume() plays from the
+   *   new position. The AudioContext is NOT resumed here.
+   */
+  async seekTo(timeSec: number) {
+    if (this.isPlaying) {
+      return this.play({time: timeSec});
+    }
+
+    // Stop any existing sources so we can rebuild them at the new offset.
+    // Don't use stop() — it resets timing fields and #isInitialized, which
+    // we want to preserve / set explicitly below.
+    Object.values(this.#tracks).forEach(track => {
+      track.stop();
+    });
+
+    const realTime = this.#context.currentTime;
+    this.#trackOffset = timeSec;
+    this.#startedAt = realTime;
+    this.#effectivePlayTime = timeSec;
+    this.#lastTempoChangeRealTime = realTime;
+    this.#lastTempoChangeEffectiveTime = timeSec;
+
+    // Schedule new sources at the seeked offset. AudioContext stays
+    // suspended (we don't call resume()), so no audio plays yet — but a
+    // later resume() will start playback from this position seamlessly,
+    // matching the existing pause()/resume() contract.
+    Object.values(this.#tracks).forEach(track => {
+      track.start(realTime, timeSec);
+    });
+    this.#isInitialized = true;
+
+    // Make sure the smoothing loop isn't running so currentTime returns
+    // the raw (now-updated) value rather than the stale smoothed value.
+    this.#stopSmoothingLoop();
+  }
+
+  /**
+   * Seek to a chart-relative time position without changing playback state.
+   */
+  async seekToChartTime(chartTimeSec: number) {
+    return this.seekTo(chartTimeSec + this.#chartDelay);
+  }
+
   async stop() {
     Object.values(this.#tracks).forEach(track => {
       track.stop();

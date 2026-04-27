@@ -80,12 +80,12 @@ export default function TimelineMinimap({
     [durationMs],
   );
 
-  // Click anywhere on track to jump
+  // Click anywhere on track to jump — preserves play/pause state.
   const handleTrackClick = useCallback(
     (e: React.MouseEvent) => {
       if (isDragging) return;
       const chartTimeMs = clientYToTimeMs(e.clientY);
-      audioManager.playChartTime(chartTimeMs / 1000);
+      audioManager.seekToChartTime(chartTimeMs / 1000);
       setCurrentTimeMs(chartTimeMs);
     },
     [audioManager, clientYToTimeMs, isDragging],
@@ -129,10 +129,10 @@ export default function TimelineMinimap({
     };
   }, [isDragging, audioManager, clientYToTimeMs]);
 
-  // Section click handler (timeMs is chart time)
+  // Section click handler (timeMs is chart time) — preserves play/pause state.
   const handleSectionClick = useCallback(
     (timeMs: number) => {
-      audioManager.playChartTime(timeMs / 1000);
+      audioManager.seekToChartTime(timeMs / 1000);
       setCurrentTimeMs(timeMs);
     },
     [audioManager],
