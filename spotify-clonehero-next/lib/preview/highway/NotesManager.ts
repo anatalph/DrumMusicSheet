@@ -36,50 +36,15 @@ export interface NotesDiff {
  * Child indices within a note group:
  * [0] = main note sprite
  * [1] = sustain tail mesh (optional, guitar only)
- * [2] = selection highlight mesh (optional)
+ * [2] = selection highlight mesh (optional, owned by NoteRenderer hooks)
  * [3] = confidence indicator (optional)
  * [4] = review indicator (optional)
  */
-const CHILD_SELECTION = 2;
 const CHILD_CONFIDENCE = 3;
 const CHILD_REVIEW = 4;
 
-/** Shared materials for overlay decorations */
-let selectionMaterial: THREE.MeshBasicMaterial | null = null;
-let hoverMaterial: THREE.MeshBasicMaterial | null = null;
+/** Shared review material for overlay decorations */
 let reviewMaterial: THREE.MeshBasicMaterial | null = null;
-
-function getSelectionMaterial(
-  clippingPlanes: THREE.Plane[],
-): THREE.MeshBasicMaterial {
-  if (!selectionMaterial) {
-    selectionMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.35,
-      depthTest: false,
-      side: THREE.DoubleSide,
-    });
-    selectionMaterial.clippingPlanes = clippingPlanes;
-  }
-  return selectionMaterial;
-}
-
-function getHoverMaterial(
-  clippingPlanes: THREE.Plane[],
-): THREE.MeshBasicMaterial {
-  if (!hoverMaterial) {
-    hoverMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.5,
-      depthTest: false,
-      side: THREE.DoubleSide,
-    });
-    hoverMaterial.clippingPlanes = clippingPlanes;
-  }
-  return hoverMaterial;
-}
 
 function getReviewMaterial(
   clippingPlanes: THREE.Plane[],
@@ -128,15 +93,11 @@ export class NotesManager {
   ) => THREE.SpriteMaterial;
 
   // -- Overlay state (set by HighwayEditor via public methods) --
-  private selectedNoteIds = new Set<string>();
-  private hoveredNoteId: string | null = null;
   private confidenceMap: Map<string, number> | null = null;
   private showConfidence = false;
   private confidenceThreshold = 0.7;
   private reviewedNoteIds: Set<string> | null = null;
 
-  /** Shared geometry for highlight overlays. */
-  private highlightGeometry: THREE.PlaneGeometry | null = null;
   /** Pool of confidence ring meshes. */
   private confidenceRingPool: THREE.Mesh[] = [];
   /** Pool of question-mark sprites for low-confidence notes. */
@@ -157,16 +118,6 @@ export class NotesManager {
   // -----------------------------------------------------------------------
   // Public overlay setters
   // -----------------------------------------------------------------------
-
-  /** Set the IDs of currently selected notes. */
-  setSelectedNoteIds(ids: Set<string>): void {
-    this.selectedNoteIds = ids;
-  }
-
-  /** Set the ID of the currently hovered note (null to clear). */
-  setHoveredNoteId(id: string | null): void {
-    this.hoveredNoteId = id;
-  }
 
   /** Update confidence display data. */
   setConfidenceData(
@@ -662,78 +613,12 @@ export class NotesManager {
    */
   private updateNoteOverlays(group: THREE.Group, pn: PreparedNote): void {
     const id = this.noteIdFromPrepared(pn);
-    const isSelected = this.selectedNoteIds.has(id);
-    const isHovered = this.hoveredNoteId === id;
 
-    // -- Selection / hover highlight (child index 2) --
-    this.updateSelectionHighlight(group, pn, isSelected, isHovered);
-
-    // -- Confidence indicator (child index 3) --
+    // Hover/selection visuals are owned by NoteRenderer's setHovered/setSelected
+    // hooks (driven by SceneReconciler). NotesManager retains the confidence
+    // and review overlays only.
     this.updateConfidenceIndicator(group, pn, id);
-
-    // -- Review indicator (child index 4) --
     this.updateReviewIndicator(group, id);
-  }
-
-  private getHighlightGeometry(): THREE.PlaneGeometry {
-    if (!this.highlightGeometry) {
-      this.highlightGeometry = new THREE.PlaneGeometry(1, 1);
-    }
-    return this.highlightGeometry;
-  }
-
-  private updateSelectionHighlight(
-    group: THREE.Group,
-    pn: PreparedNote,
-    isSelected: boolean,
-    isHovered: boolean,
-  ): void {
-    // Determine desired highlight size based on note type.
-    // Kick notes span the full highway width (0.9), so the highlight should too.
-    const noteScale = pn.isKick ? 0.045 : pn.isOpen ? 0.11 : SCALE;
-    const highlightW = pn.isKick ? 0.9 : noteScale * 2.2;
-    const highlightH = noteScale * 1.8;
-
-    if (isSelected || isHovered) {
-      let highlight: THREE.Mesh;
-
-      if (
-        group.children.length > CHILD_SELECTION &&
-        group.children[CHILD_SELECTION] instanceof THREE.Mesh
-      ) {
-        highlight = group.children[CHILD_SELECTION] as THREE.Mesh;
-      } else {
-        // Pad with nulls if needed so index is correct
-        while (group.children.length < CHILD_SELECTION) {
-          const placeholder = new THREE.Object3D();
-          placeholder.visible = false;
-          group.add(placeholder);
-        }
-        highlight = new THREE.Mesh(
-          this.getHighlightGeometry(),
-          isHovered
-            ? getHoverMaterial(this.clippingPlanes)
-            : getSelectionMaterial(this.clippingPlanes),
-        );
-        highlight.renderOrder = 5;
-        group.add(highlight);
-      }
-
-      highlight.material = isHovered
-        ? getHoverMaterial(this.clippingPlanes)
-        : getSelectionMaterial(this.clippingPlanes);
-      highlight.scale.set(highlightW, highlightH, 1);
-      highlight.position.set(0, 0, -0.001);
-      highlight.visible = true;
-    } else {
-      // Hide selection highlight if it exists
-      if (
-        group.children.length > CHILD_SELECTION &&
-        group.children[CHILD_SELECTION]
-      ) {
-        group.children[CHILD_SELECTION].visible = false;
-      }
-    }
   }
 
   private updateConfidenceIndicator(

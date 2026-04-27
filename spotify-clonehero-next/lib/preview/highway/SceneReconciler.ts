@@ -20,12 +20,22 @@ export interface ChartElement {
 /**
  * Pluggable renderer that knows how to create/recycle Three.js groups
  * for a particular element kind.
+ *
+ * `setHovered` and `setSelected` are optional in-place transitions: the
+ * renderer mutates the existing group rather than recycling it. Renderers
+ * without these hooks fall back to the recycle path — element data carrying
+ * `isHovered`/`isSelected` and changing across emits will still trigger
+ * recycle (graceful degradation; not the target).
  */
 export interface ElementRenderer<T = unknown> {
   /** Create a new Three.js group for this element. */
   create(data: T, msTime: number): THREE.Group;
   /** Called when a group is recycled to the pool. Clean up children/materials. */
   recycle(group: THREE.Group): void;
+  /** In-place hover transition. Renderer owns the visual. */
+  setHovered?(group: THREE.Group, hovered: boolean): void;
+  /** In-place selection transition. Renderer owns the visual. */
+  setSelected?(group: THREE.Group, selected: boolean): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,14 +79,6 @@ export class SceneReconciler {
   private selectedKeys = new Set<string>();
   /** Currently hovered element key. */
   private hoveredKey: string | null = null;
-
-  /** Callbacks for selection/hover visual updates. */
-  private onSelectionChange:
-    | ((key: string, group: THREE.Group, selected: boolean) => void)
-    | null = null;
-  private onHoverChange:
-    | ((key: string, group: THREE.Group, hovered: boolean) => void)
-    | null = null;
 
   constructor(
     scene: THREE.Scene,
@@ -174,12 +176,12 @@ export class SceneReconciler {
         this.activeGroups.set(el.key, group);
         this.activeGroupsRevision++;
 
-        // Apply selection/hover state to newly created group
+        // Apply selection/hover state to newly created group via renderer hooks.
         if (this.selectedKeys.has(el.key)) {
-          this.onSelectionChange?.(el.key, group, true);
+          renderer.setSelected?.(group, true);
         }
         if (this.hoveredKey === el.key) {
-          this.onHoverChange?.(el.key, group, true);
+          renderer.setHovered?.(group, true);
         }
       }
 
@@ -212,7 +214,8 @@ export class SceneReconciler {
       if (!keys.has(key)) {
         const group = this.activeGroups.get(key);
         if (group) {
-          this.onSelectionChange?.(key, group, false);
+          const el = this.elements.get(key);
+          if (el) this.renderers[el.kind]?.setSelected?.(group, false);
         }
       }
     }
@@ -221,7 +224,8 @@ export class SceneReconciler {
       if (!this.selectedKeys.has(key)) {
         const group = this.activeGroups.get(key);
         if (group) {
-          this.onSelectionChange?.(key, group, true);
+          const el = this.elements.get(key);
+          if (el) this.renderers[el.kind]?.setSelected?.(group, true);
         }
       }
     }
@@ -236,31 +240,19 @@ export class SceneReconciler {
     if (this.hoveredKey) {
       const oldGroup = this.activeGroups.get(this.hoveredKey);
       if (oldGroup) {
-        this.onHoverChange?.(this.hoveredKey, oldGroup, false);
+        const oldEl = this.elements.get(this.hoveredKey);
+        if (oldEl) this.renderers[oldEl.kind]?.setHovered?.(oldGroup, false);
       }
     }
     // Add hover to new
     if (key) {
       const newGroup = this.activeGroups.get(key);
       if (newGroup) {
-        this.onHoverChange?.(key, newGroup, true);
+        const newEl = this.elements.get(key);
+        if (newEl) this.renderers[newEl.kind]?.setHovered?.(newGroup, true);
       }
     }
     this.hoveredKey = key;
-  }
-
-  /** Register callback for selection visual updates. */
-  setSelectionChangeCallback(
-    cb: ((key: string, group: THREE.Group, selected: boolean) => void) | null,
-  ): void {
-    this.onSelectionChange = cb;
-  }
-
-  /** Register callback for hover visual updates. */
-  setHoverChangeCallback(
-    cb: ((key: string, group: THREE.Group, hovered: boolean) => void) | null,
-  ): void {
-    this.onHoverChange = cb;
   }
 
   // -----------------------------------------------------------------------
@@ -334,8 +326,6 @@ export class SceneReconciler {
     this.sortedElements = [];
     this.selectedKeys.clear();
     this.hoveredKey = null;
-    this.onSelectionChange = null;
-    this.onHoverChange = null;
   }
 
   // -----------------------------------------------------------------------
@@ -344,13 +334,24 @@ export class SceneReconciler {
 
   /**
    * Data equality check. Two elements are equal if they have
-   * the same kind, msTime, and equivalent data.
+   * the same kind and equivalent data.
+   *
+   * msTime is intentionally excluded: a position-only change becomes a
+   * reposition (handled by `updateWindow` via `group.position.y`) rather
+   * than a recycle. Drag-induced and tempo-edit-induced msTime updates
+   * therefore don't churn groups.
+   *
+   * Invariant: no renderer caches `msTime` outside `group.position.y`.
+   * `MarkerRenderer.create` doesn't read msTime; `NoteRenderer.create`
+   * reads `data.msLength` (in element data, not msTime). A renderer that
+   * adds new msTime-derived state must either recompute it in
+   * `updateWindow` or expose its own `setMsTime(group, ms)` hook.
    *
    * Uses a two-level deep comparison to handle nested objects like
    * NoteElementData's `note` sub-object without full recursive deep-equal.
    */
   private dataEqual(a: ChartElement, b: ChartElement): boolean {
-    if (a.kind !== b.kind || a.msTime !== b.msTime) return false;
+    if (a.kind !== b.kind) return false;
     if (a.data === b.data) return true;
     if (
       typeof a.data !== 'object' ||

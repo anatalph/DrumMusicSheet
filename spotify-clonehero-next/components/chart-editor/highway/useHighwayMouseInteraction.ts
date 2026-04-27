@@ -24,7 +24,6 @@ import {
   type RefObject,
 } from 'react';
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
-import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
 import type {DrumNote} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
@@ -43,19 +42,11 @@ import {
   type ChartEditorState,
 } from '../ChartEditorContext';
 import type {EditorCapabilities} from '../capabilities';
+import {AFFORDANCES} from '../affordances';
+import type {EntityKind} from '@/lib/chart-edit';
 import {selectNotesInRange} from './selectInRange';
 import type {HighwayPopoverState} from './HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
-import {chartMarkerKey, vocalMarkerKey} from '@/lib/preview/highway/markerKeys';
-
-function markerHoverReconcilerKey(
-  kind: MarkerKind,
-  tick: number,
-  partName: string,
-): string {
-  if (kind === 'section') return chartMarkerKey('section', tick);
-  return vocalMarkerKey(kind, partName, tick);
-}
 
 export type HoveredHitType =
   | 'note'
@@ -69,7 +60,6 @@ export type HoveredHitType =
 export interface UseHighwayMouseInteractionInputs {
   interactionRef: RefObject<HTMLDivElement | null>;
   interactionManagerRef: RefObject<InteractionManager | null>;
-  noteRendererRef: RefObject<NoteRenderer | null>;
   state: ChartEditorState;
   capabilities: EditorCapabilities;
   activePartName: string;
@@ -91,13 +81,12 @@ export interface UseHighwayMouseInteractionOutputs {
   onMouseMove: (e: ReactMouseEvent<HTMLDivElement>) => void;
   onMouseUp: (e: ReactMouseEvent<HTMLDivElement>) => void;
   onMouseLeave: () => void;
-  // Surfaces the parent component reads for cursor styling, box-select
-  // rendering, and downstream renderer pushes (useHighwaySync /
-  // useChartElements).
+  // Surfaces the parent component reads for cursor styling and box-select
+  // rendering. Hover state itself lives in `state.hovered` on the editor
+  // reducer; the reconciler push effect translates it to a reconciler key.
   hoverLane: number | null;
   hoverTick: number | null;
   hoveredHitType: HoveredHitType;
-  hoveredMarkerKey: string | null;
   isDragging: boolean;
   dragStart: {x: number; y: number} | null;
   dragCurrent: {x: number; y: number} | null;
@@ -155,13 +144,30 @@ function markerHitToRef(
   }
 }
 
+/**
+ * Unified hit → entity-ref translation across all selectable kinds.
+ * Notes and side-markers funnel through one shape so the cursor-tool
+ * dispatch can read affordances by kind without per-hit-type branches.
+ *
+ * Returns null for highway-plane hits or when there's no hit.
+ */
+function hitToEntityRef(
+  hit: HitResult,
+  partName: string,
+): {kind: EntityKind; id: string; tick: number} | null {
+  if (!hit) return null;
+  if (hit.type === 'note') {
+    return {kind: 'note', id: hit.noteId, tick: hit.tick};
+  }
+  return markerHitToRef(hit, partName);
+}
+
 export function useHighwayMouseInteraction(
   inputs: UseHighwayMouseInteractionInputs,
 ): UseHighwayMouseInteractionOutputs {
   const {
     interactionRef,
     interactionManagerRef,
-    noteRendererRef,
     state,
     capabilities,
     activePartName,
@@ -180,7 +186,6 @@ export function useHighwayMouseInteraction(
   const [hoverLane, setHoverLane] = useState<number | null>(null);
   const [hoverTick, setHoverTick] = useState<number | null>(null);
   const [hoveredHitType, setHoveredHitType] = useState<HoveredHitType>(null);
-  const [hoveredMarkerKey, setHoveredMarkerKey] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isErasing, setIsErasing] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
@@ -269,59 +274,105 @@ export function useHighwayMouseInteraction(
         hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y);
       const tick = hitTick(hit) ?? screenToTick(coords.x, coords.y);
 
+      const entity = hitToEntityRef(hit, activePartName);
+      const aff = entity ? AFFORDANCES[entity.kind] : null;
+
       switch (state.activeTool) {
         case 'cursor': {
-          const markerRef = markerHitToRef(hit, activePartName);
-
-          // Section: double-click → rename popover (drum-edit only).
+          // Inline-edit on double-click for kinds that declare it. Today
+          // only sections wire up an inline editor (rename popover); other
+          // inlineEditable kinds (lyric) edit through the side panel and
+          // can grow into this slot.
           if (
-            markerRef?.kind === 'section' &&
-            capabilities.selectable.has('section')
+            entity &&
+            aff?.inlineEditable &&
+            capabilities.selectable.has(entity.kind)
           ) {
             const now = Date.now();
             const last = lastClickRef.current;
-            if (last && last.tick === markerRef.tick && now - last.time < 400) {
+            if (last && last.tick === entity.tick && now - last.time < 400) {
               lastClickRef.current = null;
-              const currentName = hit?.type === 'section' ? hit.name : '';
-              onOpenPopover({
-                kind: 'section-rename',
-                tick: markerRef.tick,
-                x: coords.x,
-                y: coords.y,
-                initialSectionName: currentName,
-                currentSectionName: currentName,
-              });
-              dispatch({
-                type: 'SET_SELECTION',
-                kind: 'section',
-                ids: new Set([markerRef.id]),
-              });
-              break;
+              if (entity.kind === 'section') {
+                const currentName = hit?.type === 'section' ? hit.name : '';
+                onOpenPopover({
+                  kind: 'section-rename',
+                  tick: entity.tick,
+                  x: coords.x,
+                  y: coords.y,
+                  initialSectionName: currentName,
+                  currentSectionName: currentName,
+                });
+                dispatch({
+                  type: 'SET_SELECTION',
+                  kind: 'section',
+                  ids: new Set([entity.id]),
+                });
+                break;
+              }
             }
-            lastClickRef.current = {tick: markerRef.tick, time: now};
+            lastClickRef.current = {tick: entity.tick, time: now};
           }
 
-          // Marker hit: select + (optionally) start single-entity drag.
-          if (markerRef && capabilities.selectable.has(markerRef.kind)) {
-            dispatch({
-              type: 'SET_SELECTION',
-              kind: markerRef.kind,
-              ids: new Set([markerRef.id]),
-            });
-            // Clear note selection so the editor doesn't carry stale notes.
-            if (getSelectedIds(state, 'note').size > 0) {
-              dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+          // Selectable hit: replace or toggle selection. Notes do shift-aware
+          // multi-select; markers replace (single-marker selection only).
+          if (
+            entity &&
+            aff?.selectable &&
+            capabilities.selectable.has(entity.kind)
+          ) {
+            if (entity.kind === 'note') {
+              const noteSelection = getSelectedIds(state, 'note');
+              if (e.shiftKey) {
+                const newIds = new Set(noteSelection);
+                if (newIds.has(entity.id)) {
+                  newIds.delete(entity.id);
+                } else {
+                  newIds.add(entity.id);
+                }
+                dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
+              } else if (!noteSelection.has(entity.id)) {
+                dispatch({
+                  type: 'SET_SELECTION',
+                  kind: 'note',
+                  ids: new Set([entity.id]),
+                });
+              }
+            } else {
+              dispatch({
+                type: 'SET_SELECTION',
+                kind: entity.kind,
+                ids: new Set([entity.id]),
+              });
+              // Clear note selection so the editor doesn't carry stale notes.
+              if (getSelectedIds(state, 'note').size > 0) {
+                dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+              }
             }
-            if (capabilities.draggable.has(markerRef.kind)) {
-              beginMarkerDrag(markerRef.kind, markerRef.tick);
-              setDragStart(coords);
-              setDragCurrent(coords);
+
+            // Drag init: gated on the page's draggable capability. Notes
+            // start a multi-note drag; markers start a single-entity drag
+            // through the existing `useMarkerDrag` handler.
+            if (capabilities.draggable.has(entity.kind)) {
+              if (entity.kind === 'note') {
+                setIsDragging(true);
+              } else {
+                // Pin hover to the dragged marker (relocation of the
+                // existing !markerDrag guard).
+                dispatch({
+                  type: 'SET_HOVER',
+                  hovered: {kind: entity.kind, id: entity.id},
+                });
+                beginMarkerDrag(entity.kind as MarkerKind, entity.tick);
+              }
             }
+            setDragStart(coords);
+            setDragCurrent(coords);
             break;
           }
 
-          // Click missed any selectable marker — clear marker selections so
-          // the panel doesn't keep showing stale state.
+          // No selectable entity under the cursor. Clear marker selections
+          // so the panel doesn't show stale state, then handle the empty-
+          // highway case for notes (drum-edit only).
           for (const k of [
             'section',
             'lyric',
@@ -332,33 +383,7 @@ export function useHighwayMouseInteraction(
               dispatch({type: 'SET_SELECTION', kind: k, ids: new Set()});
             }
           }
-
-          // Note hit: select + start multi-note drag (drum-edit only).
-          if (hit?.type === 'note' && capabilities.selectable.has('note')) {
-            const id = hit.noteId;
-            const noteSelection = getSelectedIds(state, 'note');
-            if (e.shiftKey) {
-              const newIds = new Set(noteSelection);
-              if (newIds.has(id)) {
-                newIds.delete(id);
-              } else {
-                newIds.add(id);
-              }
-              dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
-            } else if (!noteSelection.has(id)) {
-              dispatch({
-                type: 'SET_SELECTION',
-                kind: 'note',
-                ids: new Set([id]),
-              });
-            }
-            if (capabilities.draggable.has('note')) {
-              setIsDragging(true);
-            }
-            setDragStart(coords);
-            setDragCurrent(coords);
-          } else if (capabilities.selectable.has('note')) {
-            // Empty / inert hit when notes are selectable: box-select or deselect.
+          if (capabilities.selectable.has('note')) {
             if (!e.shiftKey) {
               dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
             }
@@ -392,12 +417,19 @@ export function useHighwayMouseInteraction(
           break;
         }
         case 'erase': {
-          const trackKey = trackKeyFromScope(state.activeScope);
-          if (!trackKey) break;
-          if (hit?.type === 'note') {
-            executeCommand(
-              new DeleteNotesCommand(new Set([hit.noteId]), trackKey),
-            );
+          // Erase tool: delete the entity if its kind declares deletable.
+          // Today only notes have a wired delete command; other deletable
+          // kinds (sections, lyrics, phrases) no-op until their handler
+          // lands in plan 0034.
+          if (entity && aff?.deletable) {
+            if (entity.kind === 'note') {
+              const trackKey = trackKeyFromScope(state.activeScope);
+              if (trackKey) {
+                executeCommand(
+                  new DeleteNotesCommand(new Set([entity.id]), trackKey),
+                );
+              }
+            }
           }
           setIsErasing(true);
           break;
@@ -467,27 +499,26 @@ export function useHighwayMouseInteraction(
         setHoveredHitType(null);
       }
 
-      // Update note hover highlight via NoteRenderer.
-      const hoveredNoteId = hit?.type === 'note' ? hit.noteId : null;
-      noteRendererRef.current?.setHoveredNoteId(hoveredNoteId);
-
-      // Track the side-marker under the cursor so its visual gets the
-      // hover-bright background. Skip while a drag is in progress: the
-      // dragged marker handles its own visual state via markerDrag.
-      let nextMarkerKey: string | null = null;
-      if (
-        !markerDrag &&
-        markerRef &&
-        capabilities.hoverable.has(markerRef.kind)
-      ) {
-        nextMarkerKey = markerHoverReconcilerKey(
-          markerRef.kind,
-          markerRef.tick,
-          activePartName,
-        );
-      }
-      if (nextMarkerKey !== hoveredMarkerKey) {
-        setHoveredMarkerKey(nextMarkerKey);
+      // Update the editor's hover anchor. While a drag is active, leave the
+      // dragged entity hovered: the drag-begin dispatch pinned it, and we
+      // don't want the hover visual to flicker as the cursor passes over
+      // other entities mid-drag.
+      if (!markerDrag && !isDragging) {
+        let nextHover: {
+          kind:
+            | 'note'
+            | 'section'
+            | 'lyric'
+            | 'phrase-start'
+            | 'phrase-end';
+          id: string;
+        } | null = null;
+        if (hit?.type === 'note' && capabilities.hoverable.has('note')) {
+          nextHover = {kind: 'note', id: hit.noteId};
+        } else if (markerRef && capabilities.hoverable.has(markerRef.kind)) {
+          nextHover = {kind: markerRef.kind, id: markerRef.id};
+        }
+        dispatch({type: 'SET_HOVER', hovered: nextHover});
       }
 
       if (dragStart) {
@@ -514,14 +545,14 @@ export function useHighwayMouseInteraction(
     [
       activePartName,
       capabilities,
+      dispatch,
       dragStart,
       executeCommand,
       getElementCoords,
       hitTestAt,
-      hoveredMarkerKey,
+      isDragging,
       isErasing,
       markerDrag,
-      noteRendererRef,
       screenToLane,
       screenToTick,
       state.activeScope,
@@ -633,15 +664,16 @@ export function useHighwayMouseInteraction(
     setHoverLane(null);
     setHoverTick(null);
     setHoveredHitType(null);
-    setHoveredMarkerKey(null);
     setIsErasing(false);
-    // Clear note hover highlight.
-    noteRendererRef.current?.setHoveredNoteId(null);
+    // Clear hover state in the editor reducer (no entity is under the
+    // cursor any more). Drag retains its own pin, so a leave during a
+    // multi-note or marker drag does not clear the dragged entity's hover.
     if (!isDragging && !markerDrag) {
+      dispatch({type: 'SET_HOVER', hovered: null});
       setDragStart(null);
       setDragCurrent(null);
     }
-  }, [isDragging, markerDrag, noteRendererRef]);
+  }, [dispatch, isDragging, markerDrag]);
 
   return useMemo(
     () => ({
@@ -652,7 +684,6 @@ export function useHighwayMouseInteraction(
       hoverLane,
       hoverTick,
       hoveredHitType,
-      hoveredMarkerKey,
       isDragging,
       dragStart,
       dragCurrent,
@@ -665,7 +696,6 @@ export function useHighwayMouseInteraction(
       hoverLane,
       hoverTick,
       hoveredHitType,
-      hoveredMarkerKey,
       isDragging,
       dragStart,
       dragCurrent,

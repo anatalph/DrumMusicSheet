@@ -190,14 +190,12 @@ export default function HighwayEditor({
     hoverLane,
     hoverTick,
     hoveredHitType,
-    hoveredMarkerKey,
     isDragging,
     dragStart,
     dragCurrent,
   } = useHighwayMouseInteraction({
     interactionRef,
     interactionManagerRef,
-    noteRendererRef,
     state,
     capabilities,
     activePartName,
@@ -236,7 +234,6 @@ export default function HighwayEditor({
     hoverLane,
     hoverTick,
     loopRegion: state.loopRegion,
-    noteSelection: state.selection.get('note') ?? new Set<string>(),
     confidence,
     showConfidence,
     confidenceThreshold,
@@ -298,7 +295,8 @@ export default function HighwayEditor({
   ]);
 
   // Push the full chart's elements (notes + markers) to the reconciler.
-  // Hover + marker-drag overlays are baked in. The hook owns the effect.
+  // Hover and selection are pushed through separate effects in the same
+  // hook so mouse and drag can't race each other into the renderer.
   useChartElements({
     reconcilerRef,
     rendererVersion,
@@ -306,7 +304,8 @@ export default function HighwayEditor({
     activeScope: state.activeScope,
     partName: activePartName,
     capabilities,
-    hoveredMarkerKey,
+    selection: state.selection,
+    hovered: state.hovered,
     markerDrag,
     timedTempos,
     resolution,

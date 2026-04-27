@@ -76,6 +76,17 @@ export interface ChartEditorState {
    * the `getSelectedIds` / `isAnythingSelected` helpers to read.
    */
   selection: Map<EntityKind, Set<string>>;
+  /**
+   * Single-entity hover anchor — what the cursor (or active drag) is
+   * pinned to. Source of truth for the reconciler's `setHoveredKey` push;
+   * mouse handlers dispatch SET_HOVER on movement, drag begin pins it to
+   * the dragged entity, drag end relinquishes back to the next mousemove.
+   *
+   * Null when nothing is hovered. The id format matches the per-kind
+   * selection-store id (see `getSelectedIds`); a single utility translates
+   * to reconciler keys (`reconcilerKeyFor`) at the push effect.
+   */
+  hovered: {kind: EntityKind; id: string} | null;
   /** Active tool mode. */
   activeTool: ToolMode;
   /** Grid division for snapping. 0 = free (no snap). */
@@ -131,6 +142,8 @@ export type ChartEditorAction =
   | {type: 'SET_SELECTION'; kind: EntityKind; ids: ReadonlySet<string>}
   /** Clear selection across all entity kinds. */
   | {type: 'CLEAR_SELECTION'}
+  /** Set the single hovered entity (or null to clear). */
+  | {type: 'SET_HOVER'; hovered: {kind: EntityKind; id: string} | null}
   | {type: 'SET_ACTIVE_TOOL'; tool: ToolMode}
   | {type: 'SET_GRID_DIVISION'; division: number}
   | {
@@ -184,6 +197,7 @@ export const initialState: ChartEditorState = {
   playbackSpeed: 1.0,
   zoom: 1.0,
   selection: new Map(),
+  hovered: null,
   activeTool: 'cursor',
   gridDivision: 4,
   dirty: false,
@@ -241,6 +255,18 @@ export function chartEditorReducer(
     case 'CLEAR_SELECTION':
       if (state.selection.size === 0) return state;
       return {...state, selection: new Map()};
+    case 'SET_HOVER': {
+      const next = action.hovered;
+      const cur = state.hovered;
+      // Reference equality fast-path: skip dispatch when nothing changed.
+      if (
+        cur === next ||
+        (cur && next && cur.kind === next.kind && cur.id === next.id)
+      ) {
+        return state;
+      }
+      return {...state, hovered: next};
+    }
     case 'SET_ACTIVE_TOOL':
       return {...state, activeTool: action.tool};
     case 'SET_GRID_DIVISION':

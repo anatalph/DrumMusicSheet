@@ -52,8 +52,8 @@ export interface HighwaySyncInputs {
   hoverTick: number | null;
   loopRegion: {startMs: number; endMs: number} | null;
 
-  // Note overlays (selection, confidence, reviewed-state)
-  noteSelection: Set<string>;
+  // Note overlays (confidence, reviewed-state). Selection visuals are
+  // dispatched through the reconciler's hook channels — see useChartElements.
   confidence?: Map<string, number>;
   showConfidence: boolean;
   confidenceThreshold: number;
@@ -82,7 +82,6 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
     hoverLane,
     hoverTick,
     loopRegion,
-    noteSelection,
     confidence,
     showConfidence,
     confidenceThreshold,
@@ -166,9 +165,13 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
       });
     }
 
+    // Selection visuals are pushed through SceneReconciler.setSelectedKeys
+    // (see useChartElements) so notes share the same dispatch path as the
+    // marker entities. NoteRenderer keeps the confidence + review overlays;
+    // those stay on per-frame `updateOverlays` and don't fit the
+    // reconciler's hover/select hooks.
     const nr = noteRendererRef.current;
     if (nr) {
-      nr.setSelectedNoteIds(noteSelection);
       nr.setConfidenceData(
         confidence ?? null,
         showConfidence,
@@ -186,7 +189,6 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
     hoverLane,
     hoverTick,
     loopRegion,
-    noteSelection,
     confidence,
     showConfidence,
     confidenceThreshold,

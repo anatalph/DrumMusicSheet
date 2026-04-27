@@ -13,15 +13,12 @@ const HIGHWAY_HALF_WIDTH = 0.45;
 
 export interface MarkerElementData {
   text: string;
-  isSelected?: boolean;
-  /** Brightens the marker background to signal hover. */
-  isHovered?: boolean;
   /** Vertical stack index for markers at the same tick. 0 = no offset. */
   stackIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
-// Texture cache
+// Texture cache (shared module-scope; lazy entries per state-quad)
 // ---------------------------------------------------------------------------
 
 const textureCache = new Map<string, THREE.CanvasTexture>();
@@ -88,6 +85,64 @@ function createMarkerTexture(
 }
 
 // ---------------------------------------------------------------------------
+// userData layout for marker groups
+// ---------------------------------------------------------------------------
+
+interface MarkerUserData {
+  /**
+   * Lazily-resolved texture variants. The rest variant is always baked at
+   * create time; the others are getters that bake on first hover/select
+   * transition. After a getter resolves, the entry is replaced with the
+   * cached texture so subsequent toggles are O(1).
+   */
+  textures: {
+    rest: THREE.CanvasTexture;
+    hover: THREE.CanvasTexture | (() => THREE.CanvasTexture);
+    selected: THREE.CanvasTexture | (() => THREE.CanvasTexture);
+    selectedHover: THREE.CanvasTexture | (() => THREE.CanvasTexture);
+  };
+  state: {hovered: boolean; selected: boolean};
+}
+
+function getMarkerUserData(group: THREE.Group): MarkerUserData | null {
+  const u = group.userData as Partial<MarkerUserData>;
+  if (!u.textures || !u.state) return null;
+  return u as MarkerUserData;
+}
+
+function applyCurrentTexture(group: THREE.Group): void {
+  const u = getMarkerUserData(group);
+  if (!u) return;
+  const sprite = MarkerRenderer.getFlagSprite(group);
+  if (!sprite) return;
+  const {hovered, selected} = u.state;
+  let next: THREE.CanvasTexture;
+  if (selected && hovered) {
+    if (typeof u.textures.selectedHover === 'function') {
+      u.textures.selectedHover = u.textures.selectedHover();
+    }
+    next = u.textures.selectedHover;
+  } else if (selected) {
+    if (typeof u.textures.selected === 'function') {
+      u.textures.selected = u.textures.selected();
+    }
+    next = u.textures.selected;
+  } else if (hovered) {
+    if (typeof u.textures.hover === 'function') {
+      u.textures.hover = u.textures.hover();
+    }
+    next = u.textures.hover;
+  } else {
+    next = u.textures.rest;
+  }
+  const material = sprite.material as THREE.SpriteMaterial;
+  if (material.map !== next) {
+    material.map = next;
+    material.needsUpdate = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // MarkerRenderer
 // ---------------------------------------------------------------------------
 
@@ -116,15 +171,29 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
   create(data: MarkerElementData): THREE.Group {
     const group = new THREE.Group();
 
-    // 1. Text flag sprite
-    const texture = createMarkerTexture(
+    // 1. Text flag sprite -- baked at the rest state. Hover/selected variants
+    //    bake lazily on first transition (see setHovered/setSelected).
+    const restTexture = createMarkerTexture(
       data.text,
       this.color,
-      data.isSelected ?? false,
-      data.isHovered ?? false,
+      false,
+      false,
     );
+    const text = data.text;
+    const color = this.color;
+    const userData: MarkerUserData = {
+      textures: {
+        rest: restTexture,
+        hover: () => createMarkerTexture(text, color, false, true),
+        selected: () => createMarkerTexture(text, color, true, false),
+        selectedHover: () => createMarkerTexture(text, color, true, true),
+      },
+      state: {hovered: false, selected: false},
+    };
+    group.userData = userData;
+
     const material = new THREE.SpriteMaterial({
-      map: texture,
+      map: restTexture,
       transparent: true,
       depthTest: false,
     });
@@ -134,7 +203,7 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
     sprite.renderOrder = 8;
 
     // Scale proportional to texture aspect ratio
-    const texCanvas = texture.image as HTMLCanvasElement;
+    const texCanvas = restTexture.image as HTMLCanvasElement;
     const aspect = texCanvas.width / texCanvas.height;
     const flagHeight = 0.11;
     sprite.scale.set(flagHeight * aspect, flagHeight, 1);
@@ -176,7 +245,9 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
   }
 
   recycle(group: THREE.Group): void {
-    // Dispose all children's materials and geometries
+    // Dispose all children's materials and geometries. The userData getters
+    // and any baked texture references go to GC with the group; cached
+    // textures live on the shared module-scoped textureCache.
     for (const child of group.children) {
       if (child instanceof THREE.Sprite) {
         (child.material as THREE.SpriteMaterial).dispose();
@@ -185,6 +256,22 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
         (child.material as THREE.MeshBasicMaterial).dispose();
       }
     }
+  }
+
+  setHovered(group: THREE.Group, hovered: boolean): void {
+    const u = getMarkerUserData(group);
+    if (!u) return;
+    if (u.state.hovered === hovered) return;
+    u.state.hovered = hovered;
+    applyCurrentTexture(group);
+  }
+
+  setSelected(group: THREE.Group, selected: boolean): void {
+    const u = getMarkerUserData(group);
+    if (!u) return;
+    if (u.state.selected === selected) return;
+    u.state.selected = selected;
+    applyCurrentTexture(group);
   }
 
   /**

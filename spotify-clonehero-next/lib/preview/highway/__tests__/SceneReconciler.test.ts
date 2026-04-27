@@ -59,13 +59,19 @@ jest.mock('three', () => ({
 function createMockRenderer(): ElementRenderer & {
   created: Array<{data: unknown; msTime: number}>;
   recycled: MockGroup[];
+  hoverCalls: Array<{group: MockGroup; hovered: boolean}>;
+  selectCalls: Array<{group: MockGroup; selected: boolean}>;
 } {
   const created: Array<{data: unknown; msTime: number}> = [];
   const recycled: MockGroup[] = [];
+  const hoverCalls: Array<{group: MockGroup; hovered: boolean}> = [];
+  const selectCalls: Array<{group: MockGroup; selected: boolean}> = [];
 
   return {
     created,
     recycled,
+    hoverCalls,
+    selectCalls,
     create(data: unknown, msTime: number) {
       const group = new MockGroup();
       created.push({data, msTime});
@@ -73,6 +79,12 @@ function createMockRenderer(): ElementRenderer & {
     },
     recycle(group: any) {
       recycled.push(group);
+    },
+    setHovered(group: any, hovered: boolean) {
+      hoverCalls.push({group, hovered});
+    },
+    setSelected(group: any, selected: boolean) {
+      selectCalls.push({group, selected});
     },
   };
 }
@@ -592,55 +604,66 @@ describe('SceneReconciler', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Selection and hover
+  // Selection and hover -- dispatched through renderer hooks
   // -----------------------------------------------------------------------
 
   describe('selection and hover', () => {
-    it('setSelectedKeys applies highlight to visible groups', () => {
+    it('setSelectedKeys calls renderer.setSelected on visible groups', () => {
       const scene = new MockScene() as any;
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
-
-      const selectionCalls: Array<{key: string; selected: boolean}> = [];
-      reconciler.setSelectionChangeCallback((key, _group, selected) => {
-        selectionCalls.push({key, selected});
-      });
 
       reconciler.setElements([el('note:0:kick', 0)]);
       reconciler.updateWindow(0);
 
       reconciler.setSelectedKeys(new Set(['note:0:kick']));
-      expect(selectionCalls).toHaveLength(1);
-      expect(selectionCalls[0]).toEqual({key: 'note:0:kick', selected: true});
+      expect(renderer.selectCalls).toHaveLength(1);
+      expect(renderer.selectCalls[0].selected).toBe(true);
+      // Group passed is the one created for this key
+      expect(renderer.selectCalls[0].group).toBe(
+        reconciler.getGroupForKey('note:0:kick') as any,
+      );
     });
 
-    it('setHoveredKey applies hover effect to one group', () => {
+    it('setHoveredKey calls renderer.setHovered on the matched group', () => {
       const scene = new MockScene() as any;
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
-
-      const hoverCalls: Array<{key: string; hovered: boolean}> = [];
-      reconciler.setHoverChangeCallback((key, _group, hovered) => {
-        hoverCalls.push({key, hovered});
-      });
 
       reconciler.setElements([el('note:0:kick', 0)]);
       reconciler.updateWindow(0);
 
       reconciler.setHoveredKey('note:0:kick');
-      expect(hoverCalls).toHaveLength(1);
-      expect(hoverCalls[0]).toEqual({key: 'note:0:kick', hovered: true});
+      expect(renderer.hoverCalls).toHaveLength(1);
+      expect(renderer.hoverCalls[0].hovered).toBe(true);
     });
 
-    it('changing selection updates highlights without recreating groups', () => {
+    it('setHoveredKey toggles old off then new on; no recycle', () => {
       const scene = new MockScene() as any;
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-      const selectionCalls: Array<{key: string; selected: boolean}> = [];
-      reconciler.setSelectionChangeCallback((key, _group, selected) => {
-        selectionCalls.push({key, selected});
-      });
+      reconciler.setElements([
+        el('note:0:kick', 0),
+        el('note:480:redDrum', 500),
+      ]);
+      reconciler.updateWindow(0);
+
+      reconciler.setHoveredKey('note:0:kick');
+      reconciler.setHoveredKey('note:480:redDrum');
+
+      // First call: hover on for kick. Second call: hover off kick, hover on red.
+      expect(renderer.hoverCalls).toHaveLength(3);
+      expect(renderer.hoverCalls[0].hovered).toBe(true);
+      expect(renderer.hoverCalls[1].hovered).toBe(false);
+      expect(renderer.hoverCalls[2].hovered).toBe(true);
+      expect(renderer.recycled).toHaveLength(0);
+    });
+
+    it('changing selection updates highlights without recycling', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
       reconciler.setElements([
         el('note:0:kick', 0),
@@ -649,23 +672,21 @@ describe('SceneReconciler', () => {
       reconciler.updateWindow(0);
 
       reconciler.setSelectedKeys(new Set(['note:0:kick']));
-      expect(selectionCalls).toHaveLength(1);
+      expect(renderer.selectCalls).toHaveLength(1);
 
-      // Change selection to different note
+      // Switch selection
       reconciler.setSelectedKeys(new Set(['note:480:redDrum']));
       // Deselect old, select new
-      expect(selectionCalls).toHaveLength(3);
-      expect(selectionCalls[1]).toEqual({key: 'note:0:kick', selected: false});
-      expect(selectionCalls[2]).toEqual({
-        key: 'note:480:redDrum',
-        selected: true,
-      });
+      expect(renderer.selectCalls).toHaveLength(3);
+      expect(renderer.selectCalls[1].selected).toBe(false);
+      expect(renderer.selectCalls[2].selected).toBe(true);
 
-      // No new creates
+      // No new creates, no recycles
       expect(renderer.created).toHaveLength(2);
+      expect(renderer.recycled).toHaveLength(0);
     });
 
-    it('selection on element outside window -- no crash, highlight appears when scrolled in', () => {
+    it('selection on element outside window -- no crash, hook not called yet', () => {
       const scene = new MockScene() as any;
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
@@ -673,9 +694,75 @@ describe('SceneReconciler', () => {
       reconciler.setElements([el('note:0:far', 5000)]);
       reconciler.updateWindow(0);
 
-      // Select while out of window -- no crash
+      // Select while out of window -- no crash, hook does nothing
       reconciler.setSelectedKeys(new Set(['note:0:far']));
       expect(reconciler.isSelected('note:0:far')).toBe(true);
+      expect(renderer.selectCalls).toHaveLength(0);
+    });
+
+    it('selection reapplied when group enters window via updateWindow', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      // Place an element well outside the initial window
+      reconciler.setElements([el('note:0:far', 5000)]);
+      reconciler.updateWindow(0);
+      // Select while out of window
+      reconciler.setSelectedKeys(new Set(['note:0:far']));
+      expect(renderer.selectCalls).toHaveLength(0);
+
+      // Scroll so the element enters the window
+      reconciler.updateWindow(4000);
+      expect(reconciler.getActiveGroups().size).toBe(1);
+      // The hook fires on group entry to reapply current selection state
+      expect(renderer.selectCalls).toHaveLength(1);
+      expect(renderer.selectCalls[0].selected).toBe(true);
+    });
+
+    it('hover reapplied when group enters window via updateWindow', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      reconciler.setElements([el('note:0:far', 5000)]);
+      reconciler.updateWindow(0);
+      reconciler.setHoveredKey('note:0:far');
+      expect(renderer.hoverCalls).toHaveLength(0);
+
+      // Scroll so the element enters the window
+      reconciler.updateWindow(4000);
+      expect(renderer.hoverCalls).toHaveLength(1);
+      expect(renderer.hoverCalls[0].hovered).toBe(true);
+    });
+
+    it('scroll out, change selection while outside, scroll back in: visual reapplies', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      reconciler.setElements([el('note:0:kick', 100)]);
+      reconciler.updateWindow(0);
+      reconciler.setSelectedKeys(new Set(['note:0:kick']));
+      expect(renderer.selectCalls).toHaveLength(1);
+
+      // Scroll past the element so it leaves the window
+      reconciler.updateWindow(2000);
+      expect(reconciler.getActiveGroups().size).toBe(0);
+
+      // Change selection while element is outside the window: hook isn't
+      // called because the group isn't active.
+      reconciler.setSelectedKeys(new Set());
+      reconciler.setSelectedKeys(new Set(['note:0:kick']));
+      const callsBeforeReentry = renderer.selectCalls.length;
+
+      // Scroll back into view -- the new group inherits the current selection
+      reconciler.updateWindow(0);
+      expect(reconciler.getActiveGroups().size).toBe(1);
+      expect(renderer.selectCalls.length).toBe(callsBeforeReentry + 1);
+      expect(
+        renderer.selectCalls[renderer.selectCalls.length - 1].selected,
+      ).toBe(true);
     });
 
     it('clearing selection removes all highlights', () => {
@@ -683,18 +770,12 @@ describe('SceneReconciler', () => {
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-      const selectionCalls: Array<{key: string; selected: boolean}> = [];
-      reconciler.setSelectionChangeCallback((key, _group, selected) => {
-        selectionCalls.push({key, selected});
-      });
-
       reconciler.setElements([el('note:0:kick', 0)]);
       reconciler.updateWindow(0);
       reconciler.setSelectedKeys(new Set(['note:0:kick']));
 
-      // Clear
       reconciler.setSelectedKeys(new Set());
-      const deselects = selectionCalls.filter(c => !c.selected);
+      const deselects = renderer.selectCalls.filter(c => !c.selected);
       expect(deselects).toHaveLength(1);
     });
 
@@ -703,18 +784,68 @@ describe('SceneReconciler', () => {
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-      const hoverCalls: Array<{key: string; hovered: boolean}> = [];
-      reconciler.setHoverChangeCallback((key, _group, hovered) => {
-        hoverCalls.push({key, hovered});
-      });
-
       reconciler.setElements([el('note:0:kick', 0)]);
       reconciler.updateWindow(0);
       reconciler.setHoveredKey('note:0:kick');
 
       reconciler.setHoveredKey(null);
-      expect(hoverCalls).toHaveLength(2);
-      expect(hoverCalls[1]).toEqual({key: 'note:0:kick', hovered: false});
+      expect(renderer.hoverCalls).toHaveLength(2);
+      expect(renderer.hoverCalls[1].hovered).toBe(false);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // dataEqual ignores msTime (drag + tempo edits don't churn groups)
+  // -----------------------------------------------------------------------
+
+  describe('msTime changes do not recycle', () => {
+    it('drag-only msTime change: no recycle, group repositions in place', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {marker: renderer}, 1.5);
+
+      const data = {text: 'verse', stackIndex: 0};
+      reconciler.setElements([el('marker:480', 500, data, 'marker')]);
+      reconciler.updateWindow(0);
+      expect(renderer.created).toHaveLength(1);
+      const originalGroup = reconciler.getGroupForKey('marker:480');
+
+      // Drag: same key, same data, different msTime
+      reconciler.setElements([el('marker:480', 750, data, 'marker')]);
+      expect(renderer.recycled).toHaveLength(0);
+      // Group identity preserved
+      expect(reconciler.getGroupForKey('marker:480')).toBe(originalGroup);
+
+      // updateWindow repositions
+      reconciler.updateWindow(0);
+      expect(renderer.created).toHaveLength(1); // still only 1 create
+      expect(renderer.recycled).toHaveLength(0);
+    });
+
+    it('tempo edit shifting 50 downstream msTimes: 0 recycle calls', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      // 50 notes spread across the window
+      const data = {val: 'x'};
+      const before = Array.from({length: 50}, (_, i) =>
+        el(`note:${i}:redDrum`, i * 20, data),
+      );
+      reconciler.setElements(before);
+      reconciler.updateWindow(0);
+      expect(renderer.created).toHaveLength(50);
+      expect(renderer.recycled).toHaveLength(0);
+
+      // Tempo edit: each note shifts ms but data is identical
+      const after = before.map(e => ({...e, msTime: e.msTime + 200}));
+      reconciler.setElements(after);
+      expect(renderer.recycled).toHaveLength(0);
+
+      reconciler.updateWindow(0);
+      // No new creates, no recycles
+      expect(renderer.created).toHaveLength(50);
+      expect(renderer.recycled).toHaveLength(0);
     });
   });
 

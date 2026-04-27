@@ -3,13 +3,23 @@
 /**
  * Push the active chart's elements (notes + markers) to the SceneReconciler.
  *
- * Encapsulates the part of the editor that knows:
- *   - How to derive `ChartElement[]` from `parsedChart + scope + part`
- *   - How to drop drum-note elements when capabilities hide drum lanes
- *   - How to apply transient hover/drag overlays to side markers
+ * Three responsibilities, three effects:
  *
- * Pure-effect hook: it only writes to the reconciler ref. Callers don't
- * read its return value — they pass the reconciler ref in.
+ *   1. **Element set push** — derive `ChartElement[]` from the chart and
+ *      capabilities. Element data is intrinsic-only (text, lane, length,
+ *      msTime); transient state lives elsewhere. Marker drag injects a
+ *      live `msTime` so the dragged marker tracks the cursor; the
+ *      reconciler treats this as reposition-only because `dataEqual`
+ *      ignores msTime.
+ *
+ *   2. **Hover push** — translate `state.hovered` (`{kind, id} | null`) to
+ *      a reconciler key via `reconcilerKeyFor` and call
+ *      `reconciler.setHoveredKey`. One push site so mouse and drag don't
+ *      race each other through the renderer.
+ *
+ *   3. **Selection push** — translate per-kind selection sets to a single
+ *      `Set<reconciler-key>` and call `reconciler.setSelectedKeys`. Notes
+ *      ride the same dispatch path as marker entities.
  */
 
 import {useEffect, type RefObject} from 'react';
@@ -23,12 +33,13 @@ import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
  * stores this narrower shape.
  */
 type ParsedChart = ReturnType<typeof parseChartFile>;
-import type {MarkerElementData} from '@/lib/preview/highway/MarkerRenderer';
+import type {EntityKind} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import {findTrackInParsedChart} from '@/lib/chart-edit';
 import {chartToElements} from '@/lib/preview/highway/chartToElements';
 import {chartMarkerKey, vocalMarkerKey} from '@/lib/preview/highway/markerKeys';
+import {reconcilerKeyFor} from '@/lib/preview/highway/reconcilerKey';
 import type {EditorCapabilities} from '../capabilities';
 import type {EditorScope} from '../scope';
 import {trackKeyFromScope} from '../scope';
@@ -61,7 +72,10 @@ export interface UseChartElementsInputs {
   /** Active vocal part. `vocals` for non-vocals scopes. */
   partName: string;
   capabilities: EditorCapabilities;
-  hoveredMarkerKey: string | null;
+  /** Per-entity-kind selection from the editor reducer. */
+  selection: ReadonlyMap<EntityKind, ReadonlySet<string>>;
+  /** Single hovered entity from the editor reducer (or null). */
+  hovered: {kind: EntityKind; id: string} | null;
   markerDrag: MarkerDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
@@ -69,11 +83,8 @@ export interface UseChartElementsInputs {
 
 /**
  * Effect-only hook. Pushes a fresh element set to the reconciler on every
- * input change, with hover + drag overlays baked in.
- *
- * The hover/drag overlay is intentionally folded into the same push so we
- * don't need a separate "update one element" code path on the reconciler.
- * The reconciler diffs internally and only patches the changed elements.
+ * input change; pushes hover/selection through dedicated dispatch
+ * channels (no longer baked into element data).
  */
 export function useChartElements(inputs: UseChartElementsInputs): void {
   const {
@@ -83,12 +94,18 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     activeScope,
     partName,
     capabilities,
-    hoveredMarkerKey,
+    selection,
+    hovered,
     markerDrag,
     timedTempos,
     resolution,
   } = inputs;
 
+  // ---------------------------------------------------------------------
+  // 1. Element-set push.
+  //    Intrinsic-only data; drag injects msTime which the reconciler
+  //    treats as reposition-only.
+  // ---------------------------------------------------------------------
   useEffect(() => {
     const reconciler = reconcilerRef.current;
     if (!reconciler || !chart) return;
@@ -113,18 +130,10 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     const visible = elements
       .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
       .map(e => {
-        if (e.kind === 'note') return e;
-        const isHover = hoveredMarkerKey === e.key;
-        const isDrag = dragKey === e.key;
-        if (!isHover && !isDrag) return e;
-        return {
-          ...e,
-          msTime: isDrag && dragMs !== null ? dragMs : e.msTime,
-          data: {
-            ...(e.data as MarkerElementData),
-            isHovered: isHover || isDrag,
-          },
-        };
+        if (dragKey === e.key && dragMs !== null) {
+          return {...e, msTime: dragMs};
+        }
+        return e;
       });
 
     reconciler.setElements(visible);
@@ -135,9 +144,36 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     activeScope,
     partName,
     capabilities,
-    hoveredMarkerKey,
     markerDrag,
     timedTempos,
     resolution,
   ]);
+
+  // ---------------------------------------------------------------------
+  // 2. Hover push. Single source of truth: state.hovered → reconciler.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const reconciler = reconcilerRef.current;
+    if (!reconciler) return;
+    const key = hovered
+      ? reconcilerKeyFor(hovered.kind, hovered.id, partName)
+      : null;
+    reconciler.setHoveredKey(key);
+  }, [reconcilerRef, rendererVersion, hovered, partName]);
+
+  // ---------------------------------------------------------------------
+  // 3. Selection push. Translate per-kind selection ids to reconciler
+  //    keys and replace the reconciler's set.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const reconciler = reconcilerRef.current;
+    if (!reconciler) return;
+    const keys = new Set<string>();
+    for (const [kind, ids] of selection) {
+      for (const id of ids) {
+        keys.add(reconcilerKeyFor(kind, id, partName));
+      }
+    }
+    reconciler.setSelectedKeys(keys);
+  }, [reconcilerRef, rendererVersion, selection, partName]);
 }

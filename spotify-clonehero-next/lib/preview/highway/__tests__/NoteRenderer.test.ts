@@ -36,7 +36,8 @@ jest.mock('three', () => {
     center = {x: 0.5, y: 0.5, set: jest.fn()};
     visible = true;
     renderOrder = 0;
-    material: unknown = null;
+    material: any = null;
+    userData: Record<string, unknown> = {};
 
     add(child: any) {
       this.children.push(child);
@@ -57,23 +58,35 @@ jest.mock('three', () => {
 
   class MockGroup extends MockObject3D {}
 
+  class MockMesh extends MockObject3D {
+    geometry: any;
+    constructor(geometry?: any, material?: any) {
+      super();
+      this.geometry = geometry ?? {dispose: jest.fn()};
+      this.material = material ?? null;
+    }
+  }
+
   return {
     Sprite: MockSprite,
     SpriteMaterial: MockSpriteMaterial,
     Group: MockGroup,
     Object3D: MockObject3D,
-    Mesh: class extends MockObject3D {},
-    MeshBasicMaterial: jest.fn().mockImplementation(() => ({
-      color: {set: jest.fn()},
-      clippingPlanes: [],
-      depthTest: false,
-      transparent: true,
-      opacity: 0.35,
-      side: 2,
-    })),
-    PlaneGeometry: jest.fn(),
-    RingGeometry: jest.fn(),
-    CircleGeometry: jest.fn(),
+    Mesh: MockMesh,
+    MeshBasicMaterial: jest.fn().mockImplementation(
+      (opts: {color?: any; opacity?: number; transparent?: boolean} = {}) => ({
+        color: {set: jest.fn()},
+        clippingPlanes: [],
+        depthTest: false,
+        transparent: opts.transparent ?? true,
+        opacity: opts.opacity ?? 0.35,
+        side: 2,
+        dispose: jest.fn(),
+      }),
+    ),
+    PlaneGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
+    RingGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
+    CircleGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
     DoubleSide: 2,
     Plane: jest.fn(),
   };
@@ -233,5 +246,82 @@ describe('NoteRenderer', () => {
     renderer.recycle(group);
     // Material should still be the same reference (not disposed)
     expect(sprite.material).toBe(material);
+  });
+
+  describe('setHovered / setSelected hooks (additive opacity composition)', () => {
+    it('create() initialises userData hovered=false, selected=false', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      expect(group.userData.hovered).toBe(false);
+      expect(group.userData.selected).toBe(false);
+    });
+
+    it('setHovered(true) creates a highlight mesh at hover opacity (0.25)', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setHovered(group, true);
+      const highlight = group.children[2];
+      expect(highlight).toBeDefined();
+      expect(highlight.visible).toBe(true);
+      expect((highlight.material as any).opacity).toBeCloseTo(0.25);
+    });
+
+    it('setSelected(true) creates a highlight mesh at selected opacity (0.35)', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setSelected(group, true);
+      const highlight = group.children[2];
+      expect((highlight.material as any).opacity).toBeCloseTo(0.35);
+    });
+
+    it('setHovered+setSelected composes to combined opacity (0.60)', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setHovered(group, true);
+      renderer.setSelected(group, true);
+      const highlight = group.children[2];
+      expect((highlight.material as any).opacity).toBeCloseTo(0.6);
+    });
+
+    it('clearing both flags hides the highlight mesh', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setSelected(group, true);
+      const highlight = group.children[2];
+      expect(highlight.visible).toBe(true);
+
+      renderer.setSelected(group, false);
+      expect(highlight.visible).toBe(false);
+    });
+
+    it('toggling hover off but keeping selected drops to selected opacity', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setSelected(group, true);
+      renderer.setHovered(group, true);
+      renderer.setHovered(group, false);
+      const highlight = group.children[2];
+      expect((highlight.material as any).opacity).toBeCloseTo(0.35);
+    });
+
+    it('setHovered with same value is a no-op', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setHovered(group, true);
+      const highlight = group.children[2];
+      const materialBefore = highlight.material;
+      renderer.setHovered(group, true);
+      expect(highlight.material).toBe(materialBefore);
+    });
+
+    it('recycle() resets hovered/selected user-data flags', () => {
+      const renderer = createTestRenderer();
+      const group = renderer.create(makeNoteData()) as any;
+      renderer.setHovered(group, true);
+      renderer.setSelected(group, true);
+      renderer.recycle(group);
+      expect(group.userData.hovered).toBe(false);
+      expect(group.userData.selected).toBe(false);
+    });
   });
 });

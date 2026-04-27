@@ -67,19 +67,31 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   // Instance-level overlay materials (not module-level singletons).
   // Using instance fields ensures clippingPlanes reference stays valid
   // across renderer destruction/recreation (e.g., HMR, chart reload).
-  private selectionMaterial: THREE.MeshBasicMaterial | null = null;
-  private hoverMaterial: THREE.MeshBasicMaterial | null = null;
+  //
+  // Three shared highlight materials cover the three visible states:
+  //   - hover-only       : opacity 0.25
+  //   - selected-only    : opacity 0.35
+  //   - selected+hovered : opacity 0.60
+  // setHovered/setSelected swap a per-group highlight mesh's material
+  // reference between these three (or hide the mesh when neither flag is
+  // set). Geometry is shared. The reviewMaterial is a separate decoration.
+  private highlightMaterialHover: THREE.MeshBasicMaterial | null = null;
+  private highlightMaterialSelected: THREE.MeshBasicMaterial | null = null;
+  private highlightMaterialBoth: THREE.MeshBasicMaterial | null = null;
   private reviewMaterial: THREE.MeshBasicMaterial | null = null;
 
-  // Overlay state (set externally)
-  private selectedNoteIds = new Set<string>();
-  private hoveredNoteId: string | null = null;
+  // Overlay state (set externally) — hover/selection now live in the
+  // SceneReconciler and dispatch via setHovered/setSelected hooks.
   private confidenceMap: Map<string, number> | null = null;
   private showConfidence = false;
   private confidenceThreshold = 0.7;
   private reviewedNoteIds: Set<string> | null = null;
 
-  /** True when overlay state has changed and all visible notes need updating. */
+  /**
+   * True when confidence/review overlay state has changed and all visible
+   * notes need updating. Hover/selection don't set this — they update the
+   * affected group in place via setHovered/setSelected.
+   */
   private overlaysDirty = true;
 
   /** Shared geometry for highlight overlays. */
@@ -100,32 +112,41 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   // Overlay material accessors (instance-level, not module-level)
   // -----------------------------------------------------------------------
 
-  private getSelectionMaterial(): THREE.MeshBasicMaterial {
-    if (!this.selectionMaterial) {
-      this.selectionMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.35,
-        depthTest: false,
-        side: THREE.DoubleSide,
-      });
-      this.selectionMaterial.clippingPlanes = this.clippingPlanes;
+  private getHighlightMaterial(
+    hovered: boolean,
+    selected: boolean,
+  ): THREE.MeshBasicMaterial | null {
+    if (selected && hovered) {
+      if (!this.highlightMaterialBoth) {
+        this.highlightMaterialBoth = this.makeHighlightMaterial(0.6);
+      }
+      return this.highlightMaterialBoth;
     }
-    return this.selectionMaterial;
+    if (selected) {
+      if (!this.highlightMaterialSelected) {
+        this.highlightMaterialSelected = this.makeHighlightMaterial(0.35);
+      }
+      return this.highlightMaterialSelected;
+    }
+    if (hovered) {
+      if (!this.highlightMaterialHover) {
+        this.highlightMaterialHover = this.makeHighlightMaterial(0.25);
+      }
+      return this.highlightMaterialHover;
+    }
+    return null;
   }
 
-  private getHoverMaterial(): THREE.MeshBasicMaterial {
-    if (!this.hoverMaterial) {
-      this.hoverMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.5,
-        depthTest: false,
-        side: THREE.DoubleSide,
-      });
-      this.hoverMaterial.clippingPlanes = this.clippingPlanes;
-    }
-    return this.hoverMaterial;
+  private makeHighlightMaterial(opacity: number): THREE.MeshBasicMaterial {
+    const m = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    m.clippingPlanes = this.clippingPlanes;
+    return m;
   }
 
   private getReviewMaterial(): THREE.MeshBasicMaterial {
@@ -148,10 +169,12 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
   /** Dispose all owned materials. Call when the renderer is torn down. */
   dispose(): void {
-    this.selectionMaterial?.dispose();
-    this.selectionMaterial = null;
-    this.hoverMaterial?.dispose();
-    this.hoverMaterial = null;
+    this.highlightMaterialHover?.dispose();
+    this.highlightMaterialHover = null;
+    this.highlightMaterialSelected?.dispose();
+    this.highlightMaterialSelected = null;
+    this.highlightMaterialBoth?.dispose();
+    this.highlightMaterialBoth = null;
     this.reviewMaterial?.dispose();
     this.reviewMaterial = null;
     this.highlightGeometry?.dispose();
@@ -205,6 +228,18 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
     group.position.z = 0;
 
+    // Cache highlight dimensions so setHovered/setSelected can size the
+    // highlight mesh without re-reading note geometry.
+    const noteScale = data.isKick ? 0.045 : data.isOpen ? 0.11 : SCALE;
+    group.userData = {
+      hovered: false,
+      selected: false,
+      highlightDims: {
+        w: data.isKick ? 0.9 : noteScale * 2.2,
+        h: noteScale * 1.8,
+      },
+    };
+
     // Sustain tail (guitar only, non-kick, non-open with length > 0)
     if (data.msLength > 0 && !data.isKick && data.lane >= 0) {
       this.createSustain(group, data);
@@ -222,25 +257,19 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       group.remove(child);
       if (child instanceof THREE.Mesh) {
         child.geometry?.dispose();
-        // Don't dispose shared materials (selection, hover, review)
+        // Don't dispose shared materials (highlight, review).
       }
     }
+    // Reset transient hover/selection flags so a re-used group doesn't
+    // carry state into a different element.
+    const u = group.userData as {hovered?: boolean; selected?: boolean};
+    u.hovered = false;
+    u.selected = false;
   }
 
   // -----------------------------------------------------------------------
   // Overlay setters (called by the reconciler integration layer)
   // -----------------------------------------------------------------------
-
-  setSelectedNoteIds(ids: Set<string>): void {
-    this.selectedNoteIds = ids;
-    this.overlaysDirty = true;
-  }
-
-  setHoveredNoteId(id: string | null): void {
-    if (this.hoveredNoteId === id) return;
-    this.hoveredNoteId = id;
-    this.overlaysDirty = true;
-  }
 
   setConfidenceData(
     confidenceMap: Map<string, number> | null,
@@ -279,7 +308,11 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   // -----------------------------------------------------------------------
 
   /**
-   * Update overlay children (selection, confidence, review) on a note group.
+   * Update overlay children (confidence, review) on a note group. Hover and
+   * selection visuals are owned by setHovered/setSelected hooks which
+   * mutate the highlight mesh in place; this path only repaints the
+   * decoration overlays that depend on per-frame state.
+   *
    * Called for every active note group each frame via the reconciler's
    * updateWindow loop.
    */
@@ -291,12 +324,88 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     // noteKey is e.g. 'note:2880:yellowDrum' -- extract the noteId part
     // which is 'tick:type', e.g. '2880:yellowDrum'
     const id = noteKey.startsWith('note:') ? noteKey.slice(5) : noteKey;
-    const isSelected = this.selectedNoteIds.has(id);
-    const isHovered = this.hoveredNoteId === id;
-
-    this.updateSelectionHighlight(group, data, isSelected, isHovered);
     this.updateConfidenceIndicator(group, data, id);
     this.updateReviewIndicator(group, id);
+  }
+
+  // -----------------------------------------------------------------------
+  // ElementRenderer hover/selection hooks
+  // -----------------------------------------------------------------------
+
+  /**
+   * In-place hover transition. Toggles the per-group `userData.hovered`
+   * flag and recomposes the highlight mesh's opacity additively with the
+   * selected flag.
+   */
+  setHovered(group: THREE.Group, hovered: boolean): void {
+    const u = group.userData as {hovered?: boolean; selected?: boolean};
+    if (u.hovered === hovered) return;
+    u.hovered = hovered;
+    this.updateHighlightMesh(group);
+  }
+
+  /**
+   * In-place selection transition. Toggles the per-group `userData.selected`
+   * flag and recomposes the highlight mesh's opacity.
+   */
+  setSelected(group: THREE.Group, selected: boolean): void {
+    const u = group.userData as {hovered?: boolean; selected?: boolean};
+    if (u.selected === selected) return;
+    u.selected = selected;
+    this.updateHighlightMesh(group);
+  }
+
+  /**
+   * Composite the highlight mesh's material from hovered + selected. The
+   * three states (hover-only, selected-only, both) bind to three shared
+   * materials at the corresponding opacity (0.25 / 0.35 / 0.60). Mesh is
+   * hidden when neither flag is set.
+   *
+   * Lazy-create the highlight mesh on the first transition that needs it,
+   * sized via group.userData.highlightDims captured at create() time.
+   */
+  private updateHighlightMesh(group: THREE.Group): void {
+    const u = group.userData as {
+      hovered?: boolean;
+      selected?: boolean;
+      highlightDims?: {w: number; h: number};
+    };
+    const hovered = !!u.hovered;
+    const selected = !!u.selected;
+    const material = this.getHighlightMaterial(hovered, selected);
+
+    let highlight: THREE.Mesh | null = null;
+    if (
+      group.children.length > CHILD_SELECTION &&
+      group.children[CHILD_SELECTION] instanceof THREE.Mesh
+    ) {
+      highlight = group.children[CHILD_SELECTION] as THREE.Mesh;
+    }
+
+    // No mesh yet, and we don't need one — skip allocation.
+    if (!highlight && !material) return;
+
+    if (!highlight) {
+      while (group.children.length < CHILD_SELECTION) {
+        const placeholder = new THREE.Object3D();
+        placeholder.visible = false;
+        group.add(placeholder);
+      }
+      highlight = new THREE.Mesh(this.getHighlightGeometry(), material!);
+      highlight.renderOrder = 5;
+      const dims = u.highlightDims ?? {w: SCALE * 2.2, h: SCALE * 1.8};
+      highlight.scale.set(dims.w, dims.h, 1);
+      highlight.position.set(0, 0, -0.001);
+      group.add(highlight);
+      return;
+    }
+
+    if (!material) {
+      highlight.visible = false;
+      return;
+    }
+    highlight.material = material;
+    highlight.visible = true;
   }
 
   // -----------------------------------------------------------------------
@@ -325,54 +434,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       this.highlightGeometry = new THREE.PlaneGeometry(1, 1);
     }
     return this.highlightGeometry;
-  }
-
-  private updateSelectionHighlight(
-    group: THREE.Group,
-    data: NoteElementData,
-    isSelected: boolean,
-    isHovered: boolean,
-  ): void {
-    const noteScale = data.isKick ? 0.045 : data.isOpen ? 0.11 : SCALE;
-    const highlightW = data.isKick ? 0.9 : noteScale * 2.2;
-    const highlightH = noteScale * 1.8;
-
-    if (isSelected || isHovered) {
-      let highlight: THREE.Mesh;
-
-      if (
-        group.children.length > CHILD_SELECTION &&
-        group.children[CHILD_SELECTION] instanceof THREE.Mesh
-      ) {
-        highlight = group.children[CHILD_SELECTION] as THREE.Mesh;
-      } else {
-        while (group.children.length < CHILD_SELECTION) {
-          const placeholder = new THREE.Object3D();
-          placeholder.visible = false;
-          group.add(placeholder);
-        }
-        highlight = new THREE.Mesh(
-          this.getHighlightGeometry(),
-          isHovered ? this.getHoverMaterial() : this.getSelectionMaterial(),
-        );
-        highlight.renderOrder = 5;
-        group.add(highlight);
-      }
-
-      highlight.material = isHovered
-        ? this.getHoverMaterial()
-        : this.getSelectionMaterial();
-      highlight.scale.set(highlightW, highlightH, 1);
-      highlight.position.set(0, 0, -0.001);
-      highlight.visible = true;
-    } else {
-      if (
-        group.children.length > CHILD_SELECTION &&
-        group.children[CHILD_SELECTION]
-      ) {
-        group.children[CHILD_SELECTION].visible = false;
-      }
-    }
   }
 
   private updateConfidenceIndicator(
