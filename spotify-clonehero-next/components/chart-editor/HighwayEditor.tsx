@@ -271,12 +271,14 @@ export default function HighwayEditor({
 
       am.playChartTime(targetChartMs / 1000).then(() => am.pause());
 
-      // Update cursor tick to match
+      // Update cursor tick to match. Round in the scroll direction so the
+      // cursor never jumps backward when scrolling forward (or vice versa).
       if (timedTempos.length > 0) {
         const tick = msToTick(
           targetChartMs,
           timedTempos,
           state.chartDoc.parsedChart.resolution,
+          direction > 0 ? 'ceil' : 'floor',
         );
         dispatch({type: 'SET_CURSOR_TICK', tick});
       }

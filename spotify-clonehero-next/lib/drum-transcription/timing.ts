@@ -60,6 +60,7 @@ export function msToTick(
   msTime: number,
   timedTempos: TimedTempo[],
   resolution: number,
+  rounding: 'round' | 'ceil' | 'floor' = 'round',
 ): number {
   // Find the active tempo at this msTime
   let tempoIndex = 0;
@@ -74,8 +75,11 @@ export function msToTick(
   const tempo = timedTempos[tempoIndex];
   const elapsedMs = msTime - tempo.msTime;
   const tickOffset = (elapsedMs * tempo.beatsPerMinute * resolution) / 60000;
+  const raw = tempo.tick + tickOffset;
 
-  return Math.round(tempo.tick + tickOffset);
+  if (rounding === 'ceil') return Math.ceil(raw);
+  if (rounding === 'floor') return Math.floor(raw);
+  return Math.round(raw);
 }
 
 /**
