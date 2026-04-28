@@ -4,6 +4,8 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
@@ -36,7 +38,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import AudioUploader from './components/AudioUploader';
-import ProcessingView from './components/ProcessingView';
+import ProcessingView from '@/components/ProcessingView';
+import {
+  createPipelineStepTimer,
+  markStepCompletions,
+  pipelineProgressToSteps,
+} from './components/pipelineToSteps';
 import EditorApp from './components/EditorApp';
 import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
@@ -89,6 +96,39 @@ function DrumTranscriptionInner() {
   const [pipelineProgress, setPipelineProgress] =
     useState<PipelineProgress | null>(null);
   const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
+  const stepTimerRef = useRef(createPipelineStepTimer());
+  const [stepTick, setStepTick] = useState(0);
+
+  // Mark step completions whenever the active step changes. The runner
+  // doesn't separately notify us; advancing past a step implicitly
+  // completes it.
+  useEffect(() => {
+    if (!pipelineProgress) {
+      stepTimerRef.current = createPipelineStepTimer();
+      return;
+    }
+    markStepCompletions(pipelineProgress, stepTimerRef.current);
+  }, [pipelineProgress]);
+
+  // Tick every second so the active step's elapsed-based ETA updates
+  // even when the worker hasn't sent a new progress message. Cheap;
+  // only runs while a pipeline is in flight.
+  useEffect(() => {
+    if (!pipelineProgress) return;
+    const id = setInterval(() => setStepTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [pipelineProgress]);
+
+  const processingSteps = useMemo(
+    () =>
+      pipelineProgress
+        ? pipelineProgressToSteps(pipelineProgress, stepTimerRef.current)
+        : [],
+    // stepTick is intentionally a dependency: it forces ETA recomputation
+    // even when pipelineProgress is unchanged.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pipelineProgress, stepTick],
+  );
 
   // Result of checking a project's stage, tagged with the projectId we
   // checked for. Tagging lets us derive UI state from a single source:
@@ -473,7 +513,18 @@ function DrumTranscriptionInner() {
           </Button>
         </div>
         <ProcessingView
-          progress={pipelineProgress!}
+          title={
+            pipelineProgress?.projectName
+              ? `Processing: ${pipelineProgress.projectName}`
+              : 'Processing'
+          }
+          description="This may take a few minutes depending on the audio length."
+          steps={processingSteps}
+          error={
+            pipelineProgress?.step === 'error'
+              ? (pipelineProgress.error ?? 'An unexpected error occurred.')
+              : undefined
+          }
           onRetry={handleRetryPipeline}
           onCancel={handleCancelPipeline}
         />
