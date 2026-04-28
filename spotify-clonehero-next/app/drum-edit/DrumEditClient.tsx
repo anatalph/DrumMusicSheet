@@ -273,6 +273,7 @@ function DrumEditInner() {
           <CardContent>
             <ChartDropZone
               onLoaded={handleChartLoaded}
+              id="drum-edit-chart"
               disabled={pageState === 'loading-chart'}
             />
           </CardContent>

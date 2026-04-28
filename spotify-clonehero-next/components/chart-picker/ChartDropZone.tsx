@@ -16,6 +16,8 @@ import {
 interface ChartDropZoneProps {
   onLoaded: (result: LoadedFiles) => void;
   disabled?: boolean;
+  /** Persistent ID for the File System Access API directory picker. */
+  id?: string;
   /** Additional CSS classes for the outer container. */
   className?: string;
 }
@@ -23,6 +25,7 @@ interface ChartDropZoneProps {
 export default function ChartDropZone({
   onLoaded,
   disabled,
+  id = 'chart-picker',
   className,
 }: ChartDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -87,23 +90,59 @@ export default function ChartDropZone({
   );
 
   const handlePickFolder = useCallback(async () => {
-    if (disabled || isLoading) return;
+    const t0 = performance.now();
+    console.log('[ChartDropZone:pickFolder] click', {
+      id,
+      disabled,
+      isLoading,
+      hasUserActivation:
+        (navigator as any).userActivation?.isActive ?? 'unsupported',
+      hasShowDirectoryPicker:
+        typeof window.showDirectoryPicker === 'function',
+      visibility: document.visibilityState,
+      hasFocus: document.hasFocus(),
+    });
+    if (disabled || isLoading) {
+      console.log('[ChartDropZone:pickFolder] early-return (disabled/loading)');
+      return;
+    }
+    let blurred = false;
+    const onBlur = () => {
+      blurred = true;
+      console.log('[ChartDropZone:pickFolder] window.blur fired (picker likely opened)');
+    };
+    window.addEventListener('blur', onBlur, {once: true});
+    const watchdog = window.setTimeout(() => {
+      console.log('[ChartDropZone:pickFolder] watchdog 1500ms', {
+        blurred,
+        hasFocus: document.hasFocus(),
+        visibility: document.visibilityState,
+      });
+    }, 1500);
     try {
-      // No `id` here. Chrome's per-tab picker state with an `id` can get
-      // stuck after a cancelled call — picker silently fails to reopen
-      // until the tab is closed and reopened. Cost of dropping it: picker
-      // no longer remembers the last folder. Worth it.
-      const dirHandle = await window.showDirectoryPicker({mode: 'read'});
+      console.log('[ChartDropZone:pickFolder] calling showDirectoryPicker');
+      const dirHandle = await window.showDirectoryPicker({id});
+      console.log('[ChartDropZone:pickFolder] resolved', {
+        dt: Math.round(performance.now() - t0),
+        name: dirHandle.name,
+      });
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);
     } catch (e: any) {
+      console.log('[ChartDropZone:pickFolder] threw', {
+        name: e?.name,
+        message: e?.message,
+        dt: Math.round(performance.now() - t0),
+      });
       if (e.name === 'AbortError') return; // User cancelled
       toast.error(e.message ?? 'Failed to read directory');
     } finally {
+      window.removeEventListener('blur', onBlur);
+      window.clearTimeout(watchdog);
       setIsLoading(false);
     }
-  }, [onLoaded, disabled, isLoading]);
+  }, [onLoaded, disabled, isLoading, id]);
 
   return (
     <div className={cn('space-y-3', className)}>
