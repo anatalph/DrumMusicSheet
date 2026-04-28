@@ -16,8 +16,6 @@ import {
 interface ChartDropZoneProps {
   onLoaded: (result: LoadedFiles) => void;
   disabled?: boolean;
-  /** Persistent ID for the File System Access API directory picker. */
-  id?: string;
   /** Additional CSS classes for the outer container. */
   className?: string;
 }
@@ -25,7 +23,6 @@ interface ChartDropZoneProps {
 export default function ChartDropZone({
   onLoaded,
   disabled,
-  id = 'chart-picker',
   className,
 }: ChartDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -92,7 +89,11 @@ export default function ChartDropZone({
   const handlePickFolder = useCallback(async () => {
     if (disabled || isLoading) return;
     try {
-      const dirHandle = await window.showDirectoryPicker({id});
+      // No `id` here. Chrome's per-tab picker state with an `id` can get
+      // stuck after a cancelled call — picker silently fails to reopen
+      // until the tab is closed and reopened. Cost of dropping it: picker
+      // no longer remembers the last folder. Worth it.
+      const dirHandle = await window.showDirectoryPicker({mode: 'read'});
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);
@@ -102,7 +103,7 @@ export default function ChartDropZone({
     } finally {
       setIsLoading(false);
     }
-  }, [onLoaded, disabled, isLoading, id]);
+  }, [onLoaded, disabled, isLoading]);
 
   return (
     <div className={cn('space-y-3', className)}>

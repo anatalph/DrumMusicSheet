@@ -880,7 +880,7 @@ function LyricsAlignInner() {
               </div>
             </div>
 
-            <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
+            <ChartDropZone onLoaded={handleChartLoaded} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         )}
@@ -1083,9 +1083,10 @@ function ReplaceChartButton({
   const handlePickFolder = useCallback(async () => {
     if (isLoading) return;
     try {
-      const dirHandle = await window.showDirectoryPicker({
-        id: 'add-lyrics-chart',
-      });
+      // No `id` here. Chrome's per-tab picker state with an `id` can get
+      // stuck after a cancelled call — picker silently fails to reopen
+      // until the tab is closed and reopened.
+      const dirHandle = await window.showDirectoryPicker({mode: 'read'});
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);
