@@ -28,9 +28,13 @@ import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
-import type {
-  LoadedFiles,
-  SourceFormat,
+import {
+  detectFormat,
+  readChartDirectory,
+  readSngFile,
+  readZipFile,
+  type LoadedFiles,
+  type SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import ProcessingView, {
@@ -814,11 +818,7 @@ function LyricsAlignInner() {
               </div>
             </div>
 
-            <ChartDropZone
-              onLoaded={handleChartLoaded}
-              id="add-lyrics-chart"
-              folderPickerVariant="link"
-            />
+            <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         )}
@@ -867,10 +867,7 @@ function LyricsAlignInner() {
                   </p>
                 </div>
                 {status === 'input' && (
-                  <ChartDropZone
-                    onLoaded={handleChartLoaded}
-                    id="add-lyrics-chart"
-                  />
+                  <ReplaceChartButton onLoaded={handleChartLoaded} />
                 )}
               </div>
 
@@ -970,6 +967,98 @@ function FlowArrow() {
       viewBox="0 0 40 24">
       <path d="M0 9h28l-6-6 3-3 12 12-12 12-3-3 6-6H0z" />
     </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Replace-chart button
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact replace-chart control for the chart-loaded state. Replaces
+ * the full ChartDropZone, which would otherwise duplicate the loaded
+ * card and make users wonder if the upload took.
+ *
+ * Folder picker is the primary action — it's the more common path
+ * users reach for when picking a Clone Hero chart. .zip / .sng falls
+ * back to a hidden file input via a small text link beneath.
+ */
+function ReplaceChartButton({
+  onLoaded,
+}: {
+  onLoaded: (result: LoadedFiles) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      const format = detectFormat(file);
+      if (!format) {
+        toast.error('Please pick a .zip or .sng file');
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const result =
+          format === 'zip' ? await readZipFile(file) : await readSngFile(file);
+        onLoaded(result);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Failed to read file');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [onLoaded],
+  );
+
+  const handlePickFolder = useCallback(async () => {
+    if (isLoading) return;
+    try {
+      const dirHandle = await window.showDirectoryPicker({
+        id: 'add-lyrics-chart',
+      });
+      setIsLoading(true);
+      const result = await readChartDirectory(dirHandle);
+      onLoaded(result);
+    } catch (e) {
+      const err = e as DOMException;
+      if (err?.name === 'AbortError') return;
+      toast.error(err?.message ?? 'Failed to read directory');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading, onLoaded]);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handlePickFolder}
+        disabled={isLoading}>
+        <FolderOpen className="h-4 w-4 mr-2" />
+        {isLoading ? 'Reading...' : 'Choose new chart'}
+      </Button>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={isLoading}
+        className="text-xs text-muted-foreground underline-offset-4 hover:underline disabled:opacity-50">
+        or pick a .zip / .sng file
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".zip,.sng"
+        className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+          e.target.value = '';
+        }}
+      />
+    </div>
   );
 }
 

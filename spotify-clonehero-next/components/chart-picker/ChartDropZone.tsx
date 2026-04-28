@@ -20,12 +20,6 @@ interface ChartDropZoneProps {
   id?: string;
   /** Additional CSS classes for the outer container. */
   className?: string;
-  /**
-   * Visual treatment for the folder-picker fallback. Folder picker has
-   * weaker browser support than zip/sng drop, so callers can demote it
-   * to a small inline link when zip/sng is the primary path.
-   */
-  folderPickerVariant?: 'button' | 'link';
 }
 
 export default function ChartDropZone({
@@ -33,7 +27,6 @@ export default function ChartDropZone({
   disabled,
   id = 'chart-picker',
   className,
-  folderPickerVariant = 'button',
 }: ChartDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -141,30 +134,18 @@ export default function ChartDropZone({
         />
       </div>
 
-      {/* Folder picker fallback. Folder access is the weaker browser path
-          (Chromium-only File System Access API), so callers that lead
-          with zip/sng drop can demote it to a small inline link. */}
-      {folderPickerVariant === 'button' ? (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handlePickFolder}
-          disabled={disabled || isLoading}
-          className="w-full">
-          <FolderOpen className="h-4 w-4 mr-2" />
-          Or select a chart folder
-        </Button>
-      ) : (
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={handlePickFolder}
-            disabled={disabled || isLoading}
-            className="text-xs text-muted-foreground underline-offset-4 hover:underline disabled:opacity-50">
-            Or select a chart folder
-          </button>
-        </div>
-      )}
+      {/* Folder picker. Surfaces equal weight to the dropzone because
+          folder selection is, in practice, the more common entrypoint
+          users expect. */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handlePickFolder}
+        disabled={disabled || isLoading}
+        className="w-full">
+        <FolderOpen className="h-4 w-4 mr-2" />
+        Or select a chart folder
+      </Button>
     </div>
   );
 }
