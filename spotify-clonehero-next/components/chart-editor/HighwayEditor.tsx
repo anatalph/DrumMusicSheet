@@ -256,21 +256,23 @@ export default function HighwayEditor({
       const am = audioManagerRef.current;
       if (!am) return;
 
-      // Scroll by a fixed time amount per wheel tick (25ms).
+      // Scale the step by the wheel delta so trackpads (which fire many
+      // small ~4px events per gesture) feel proportional, while mouse
+      // wheels (which fire large ~100-300px discrete clicks) hit the cap
+      // and stay at a comfortable fixed step per click. The cap is the
+      // pre-tuned mouse-wheel feel; MS_PER_DELTA scales linearly below it.
       // deltaY < 0 = wheel up = scroll forward, deltaY > 0 = backward.
       // seekToChartTime updates timing fields without resuming the
-      // AudioContext, so back-to-back wheel events don't drift forward
-      // between the seek and a deferred pause (the previous
-      // playChartTime+pause pattern leaked 5–40ms of forward playback per
-      // scroll, sometimes flipping a -25ms backward scroll into a net
-      // forward move).
-      const SCROLL_STEP_MS = 45;
+      // AudioContext, so back-to-back wheel events don't drift forward.
+      const MS_PER_DELTA = 0.45;
+      const MAX_STEP_MS = 60;
+      const stepMs = Math.min(MAX_STEP_MS, Math.abs(e.deltaY) * MS_PER_DELTA);
       const direction = e.deltaY < 0 ? 1 : -1;
       const currentChartMs = am.chartTime * 1000;
       const maxChartMs = am.duration * 1000 - am.chartDelay * 1000;
       const targetChartMs = Math.max(
         0,
-        Math.min(currentChartMs + direction * SCROLL_STEP_MS, maxChartMs),
+        Math.min(currentChartMs + direction * stepMs, maxChartMs),
       );
 
       am.seekToChartTime(targetChartMs / 1000);
