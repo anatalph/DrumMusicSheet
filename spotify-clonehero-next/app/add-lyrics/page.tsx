@@ -6,6 +6,7 @@ import {
   ClipboardPaste,
   Download,
   FolderOpen,
+  Move,
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
@@ -13,6 +14,14 @@ import {toast} from 'sonner';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 import {Button} from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {getExtension, getBasename} from '@/lib/src-shared/utils';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {
@@ -327,7 +336,20 @@ function LyricsAlignInner() {
     null,
   );
   const [editorData, setEditorData] = useState<EditorData | null>(null);
+  const [showIntroModal, setShowIntroModal] = useState(false);
   const initStartedRef = useRef(false);
+
+  // Open the intro modal once per browser, the first time the user
+  // lands in the editor. Versioned key so a future copy update (v2)
+  // re-fires once for returning users.
+  useEffect(() => {
+    if (!editorData) return;
+    const KEY = 'add-lyrics:editor-intro-shown-v1';
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem(KEY)) return;
+    setShowIntroModal(true);
+    localStorage.setItem(KEY, '1');
+  }, [editorData]);
 
   const updateAlignStep = useCallback(
     (key: AlignStepState['key'], update: Partial<AlignStepState>) => {
@@ -729,6 +751,9 @@ function LyricsAlignInner() {
               syllables aligned into {alignedLines.length} lines
             </p>
           </div>
+          <span className="hidden sm:inline text-xs text-muted-foreground">
+            Drag any lyric to fix its timing
+          </span>
           <Button
             variant="outline"
             size="sm"
@@ -750,6 +775,43 @@ function LyricsAlignInner() {
             Download .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
           </Button>
         </div>
+        <Dialog open={showIntroModal} onOpenChange={setShowIntroModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Your lyrics are aligned</DialogTitle>
+              <DialogDescription>
+                A few things worth knowing before you fine-tune.
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="space-y-3 text-sm">
+              <li className="flex items-start gap-3">
+                <Move className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <span>
+                  <strong>Drag any lyric</strong> on the highway to nudge its
+                  timing. Useful when the aligner picked the wrong onset.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <AudioWaveform className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <span>
+                  The waveform on the highway is the{' '}
+                  <strong>isolated vocal stem</strong>, not the full song mix —
+                  easier to spot where each line should sit.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Download className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <span>
+                  When the timing looks right, hit <strong>Download</strong> in
+                  the top-right to get the updated chart.
+                </span>
+              </li>
+            </ul>
+            <DialogFooter>
+              <Button onClick={() => setShowIntroModal(false)}>Got it</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <div className="flex-1 min-h-0">
           {editorData && cloneHeroMetadata ? (
             <ChartEditor
