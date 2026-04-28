@@ -183,55 +183,64 @@ async function ensureSession() {
 }
 
 // ---------------------------------------------------------------------------
-// CTC emissions (chunked)
+// CTC emissions
 // ---------------------------------------------------------------------------
 
-async function getEmissions(
+/** Single forward pass over `audio`, returning log-softmax emissions. */
+async function runForward(
   audio: Float32Array,
 ): Promise<{logProbs: Float32Array; T: number; C: number}> {
   if (!session) throw new Error('Model not loaded');
 
-  const CHUNK_SECONDS = 30;
-  const CHUNK_SAMPLES = CHUNK_SECONDS * 16000;
-  const totalSamples = audio.length;
-  const numChunks = Math.ceil(totalSamples / CHUNK_SAMPLES);
+  const inputTensor = new ort.Tensor('float32', audio, [1, audio.length]);
+  let results: ort.InferenceSession.OnnxValueMapType;
+  try {
+    results = await session.run({input: inputTensor});
+  } finally {
+    inputTensor.dispose();
+  }
+  const output = results['output'];
 
-  const allChunks: {data: Float32Array; T: number; C: number}[] = [];
+  const dims = output.dims as number[];
+  const T = dims[1];
+  const C = dims[2];
+  const data = output.data as Float32Array;
+
+  const logProbs = new Float32Array(T * C);
+  for (let t = 0; t < T; t++) {
+    let maxVal = -Infinity;
+    for (let c = 0; c < C; c++) maxVal = Math.max(maxVal, data[t * C + c]);
+    let expSum = 0;
+    for (let c = 0; c < C; c++) expSum += Math.exp(data[t * C + c] - maxVal);
+    const logExpSum = Math.log(expSum) + maxVal;
+    for (let c = 0; c < C; c++) {
+      logProbs[t * C + c] = data[t * C + c] - logExpSum;
+    }
+  }
+
+  output.dispose();
+  return {logProbs, T, C};
+}
+
+/**
+ * Forward in 30 s non-overlapping chunks. Drifts ~30-40 ms vs single-pass
+ * because wav2vec2 has global attention, but reliable on memory-constrained
+ * backends.
+ */
+async function runChunked(
+  audio: Float32Array,
+): Promise<{logProbs: Float32Array; T: number; C: number}> {
+  const CHUNK_SAMPLES = 30 * 16000;
+  const numChunks = Math.ceil(audio.length / CHUNK_SAMPLES);
+  const allChunks: {logProbs: Float32Array; T: number; C: number}[] = [];
 
   for (let i = 0; i < numChunks; i++) {
     const start = i * CHUNK_SAMPLES;
-    const end = Math.min(start + CHUNK_SAMPLES, totalSamples);
+    const end = Math.min(start + CHUNK_SAMPLES, audio.length);
     const chunk = audio.slice(start, end);
-
     if (chunk.length < 8000) break;
-
     progress(`CTC inference: chunk ${i + 1}/${numChunks}`);
-
-    const inputTensor = new ort.Tensor('float32', chunk, [1, chunk.length]);
-    const results = await session.run({input: inputTensor});
-    const output = results['output'];
-
-    const dims = output.dims as number[];
-    const T = dims[1];
-    const C = dims[2];
-    const data = output.data as Float32Array;
-
-    // log_softmax
-    const logProbs = new Float32Array(T * C);
-    for (let t = 0; t < T; t++) {
-      let maxVal = -Infinity;
-      for (let c = 0; c < C; c++) maxVal = Math.max(maxVal, data[t * C + c]);
-      let expSum = 0;
-      for (let c = 0; c < C; c++) expSum += Math.exp(data[t * C + c] - maxVal);
-      const logExpSum = Math.log(expSum) + maxVal;
-      for (let c = 0; c < C; c++) {
-        logProbs[t * C + c] = data[t * C + c] - logExpSum;
-      }
-    }
-
-    allChunks.push({data: logProbs, T, C});
-    inputTensor.dispose();
-    output.dispose();
+    allChunks.push(await runForward(chunk));
   }
 
   if (allChunks.length === 0) throw new Error('No audio processed');
@@ -241,11 +250,44 @@ async function getEmissions(
   const logProbs = new Float32Array(totalT * C);
   let offset = 0;
   for (const ch of allChunks) {
-    logProbs.set(ch.data, offset);
+    logProbs.set(ch.logProbs, offset);
     offset += ch.T * C;
   }
-
   return {logProbs, T: totalT, C};
+}
+
+/**
+ * CTC emissions over the full song.
+ *
+ * Routing:
+ *   WebGPU → chunked. The attention scores tensor is [1, 12, T, T]; for any
+ *     non-trivial song length T² blows out maxBufferSize, and the resulting
+ *     createBuffer rejection escapes the await chain (uncatchable here).
+ *   WASM → single-pass. CPU heap fits a full forward and matches the
+ *     autoresearch reference (exp23 was tuned on single-pass emissions).
+ *     Falls back to chunked on any failure.
+ */
+async function getEmissions(
+  audio: Float32Array,
+): Promise<{logProbs: Float32Array; T: number; C: number}> {
+  if (!session) throw new Error('Model not loaded');
+  if (audio.length < 8000) throw new Error('No audio processed');
+
+  if (useWebGPU) {
+    return runChunked(audio);
+  }
+
+  const seconds = audio.length / 16000;
+  progress(`CTC inference: full song (${seconds.toFixed(1)}s, single-pass)`);
+  try {
+    return await runForward(audio);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    progress(
+      `Full-song forward failed (${msg.slice(0, 120)}) — falling back to 30s chunks`,
+    );
+    return runChunked(audio);
+  }
 }
 
 // ---------------------------------------------------------------------------
