@@ -96,8 +96,12 @@ export function pipelineProgressToSteps(
         timing.startedAt = now;
         timer.set(cfg.key, timing);
       }
-      // ETA fallback: only meaningful past 5%.
-      if (stepProgress > 0.05 && timing.startedAt !== undefined) {
+      // Prefer worker-provided ETA when present (Demucs computes one
+      // from segment-duration EMA). Fall back to elapsed * (1-p)/p
+      // smoothed when only `progress` is available.
+      if (progress.etaSeconds !== undefined) {
+        etaSeconds = progress.etaSeconds;
+      } else if (stepProgress > 0.05 && timing.startedAt !== undefined) {
         const elapsedSec = (now - timing.startedAt) / 1000;
         const rawEta = (elapsedSec * (1 - stepProgress)) / stepProgress;
         const prev = timing.smoothedEtaSeconds ?? rawEta;

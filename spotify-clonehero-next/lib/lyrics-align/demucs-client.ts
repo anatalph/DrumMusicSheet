@@ -5,11 +5,23 @@
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/demucs-client.ts
  */
 
+export interface DemucsProgress {
+  /** Human-readable status line. */
+  message: string;
+  /** 0..1 progress within the separation step. Omitted for setup messages. */
+  percent?: number;
+  /** Estimated seconds remaining in the separation step. */
+  etaSeconds?: number;
+}
+
 export async function runDemucsInWorker(
   audioBuffer: AudioBuffer,
-  onProgress?: (msg: string) => void,
+  onProgress?: (progress: DemucsProgress) => void,
 ): Promise<Float32Array> {
-  const log = onProgress ?? console.log;
+  const log = (progress: DemucsProgress) => {
+    if (onProgress) onProgress(progress);
+    else console.log(progress.message);
+  };
 
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./demucs-worker.ts', import.meta.url), {
@@ -20,10 +32,14 @@ export async function runDemucsInWorker(
       const msg = e.data;
 
       if (msg.type === 'progress') {
-        log(msg.message);
+        log({
+          message: msg.message,
+          percent: msg.percent,
+          etaSeconds: msg.etaSeconds,
+        });
       } else if (msg.type === 'loaded') {
         // Model loaded — now send audio
-        log('Preparing audio for separation...');
+        log({message: 'Preparing audio for separation...'});
 
         const numSamples = audioBuffer.length;
         const left = audioBuffer.getChannelData(0);
@@ -46,7 +62,7 @@ export async function runDemucsInWorker(
       } else if (msg.type === 'result') {
         // Done — terminate worker to reclaim all WASM memory
         worker.terminate();
-        log('Worker terminated — WASM memory reclaimed');
+        log({message: 'Worker terminated — WASM memory reclaimed'});
         resolve(msg.vocals16k as Float32Array);
       } else if (msg.type === 'error') {
         worker.terminate();
@@ -60,7 +76,7 @@ export async function runDemucsInWorker(
     };
 
     // Start by loading the model
-    log('Starting Demucs worker...');
+    log({message: 'Starting Demucs worker...'});
     worker.postMessage({type: 'load'});
   });
 }

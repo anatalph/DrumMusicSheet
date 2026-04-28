@@ -56,6 +56,11 @@ export interface SeparationProgress {
   segment?: number;
   totalSegments?: number;
   percent: number; // 0-1
+  /**
+   * Estimated seconds remaining in the segment loop (only set during
+   * 'processing' once we have at least one segment of timing data).
+   */
+  etaSeconds?: number;
 }
 
 export type ProgressCallback = (progress: SeparationProgress) => void;
@@ -191,12 +196,17 @@ async function runSeparation(
   // -----------------------------------------------------------------------
   // 2. Segment loop
   // -----------------------------------------------------------------------
+  let avgSegMs = 0; // exponential moving average of per-segment wall time
   for (let seg = 0; seg < numSegments; seg++) {
+    const segT0 = performance.now();
+    const etaSeconds =
+      seg === 0 ? undefined : (avgSegMs * (numSegments - seg)) / 1000;
     onProgress?.({
       step: 'processing',
       segment: seg,
       totalSegments: numSegments,
       percent: (seg / numSegments) * 0.9, // 0-90% for inference
+      etaSeconds,
     });
 
     // Yield to UI thread periodically
@@ -308,6 +318,9 @@ async function runSeparation(
         outputs[MODEL_SOURCES[s]][outIdx + 1] += rightVal * weight;
       }
     }
+
+    const segMs = performance.now() - segT0;
+    avgSegMs = seg === 0 ? segMs : avgSegMs * 0.7 + segMs * 0.3;
   }
 
   // -----------------------------------------------------------------------

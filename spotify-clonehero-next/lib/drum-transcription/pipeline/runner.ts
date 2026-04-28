@@ -57,6 +57,12 @@ export interface PipelineProgress {
   projectName?: string;
   /** Error message if step === 'error'. */
   error?: string;
+  /**
+   * Estimated seconds remaining within the current step. Provided when
+   * the underlying step has a meaningful estimate (e.g. Demucs's
+   * exponential moving average over segment durations).
+   */
+  etaSeconds?: number;
 }
 
 export type PipelineProgressCallback = (progress: PipelineProgress) => void;
@@ -141,6 +147,7 @@ export async function runPipeline(
         onProgress({
           step: 'separating',
           progress: sepProgress.percent,
+          etaSeconds: sepProgress.etaSeconds,
           projectId,
           projectName: metadata.name,
         });

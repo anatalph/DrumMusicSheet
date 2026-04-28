@@ -450,8 +450,8 @@ function LyricsAlignInner() {
         const {runDemucsInWorker} = await import(
           '@/lib/lyrics-align/demucs-client'
         );
-        vocals16k = await runDemucsInWorker(audioBuffer, msg =>
-          updateAlignStep('separate', {detail: msg}),
+        vocals16k = await runDemucsInWorker(audioBuffer, p =>
+          updateAlignStep('separate', {detail: p.message}),
         );
 
         updateAlignStep('separate', {

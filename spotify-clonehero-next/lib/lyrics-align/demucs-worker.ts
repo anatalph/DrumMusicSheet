@@ -44,7 +44,14 @@ const STEP = SEGMENT_SAMPLES - OVERLAP;
 let session: ort.InferenceSession | null = null;
 
 type OutboundMessage =
-  | {type: 'progress'; message: string}
+  | {
+      type: 'progress';
+      message: string;
+      /** 0..1 progress within the separation step. Omitted for setup messages. */
+      percent?: number;
+      /** Estimated seconds remaining in the separation step. */
+      etaSeconds?: number;
+    }
   | {type: 'loaded'}
   | {type: 'result'; vocals16k: Float32Array}
   | {type: 'error'; message: string};
@@ -53,8 +60,11 @@ function post(msg: OutboundMessage, transfer?: Transferable[]) {
   self.postMessage(msg, {transfer: transfer ?? []});
 }
 
-function progress(message: string) {
-  post({type: 'progress', message});
+function progress(
+  message: string,
+  extra?: {percent?: number; etaSeconds?: number},
+) {
+  post({type: 'progress', message, ...extra});
 }
 
 async function loadModel() {
@@ -144,11 +154,12 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
     const specImagTensor = new ort.Tensor('float32', stft.imag, specShape);
     const audioTensor = new ort.Tensor('float32', segmentPlanar, audioShape);
 
-    const remaining =
-      seg === 0
-        ? ''
-        : `: ${Math.round((avgSegMs * (numSegments - seg)) / 1000)} seconds remaining`;
-    progress(`Separating segment ${seg + 1}/${numSegments}${remaining}`);
+    const etaSeconds =
+      seg === 0 ? undefined : (avgSegMs * (numSegments - seg)) / 1000;
+    progress(`Separating segment ${seg + 1}/${numSegments}`, {
+      percent: seg / numSegments,
+      etaSeconds,
+    });
 
     const results = await session.run({
       spec_real: specRealTensor,
