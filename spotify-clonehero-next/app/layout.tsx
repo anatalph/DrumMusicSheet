@@ -12,15 +12,36 @@ import HeaderAuthControls from '@/components/HeaderAuthControls';
 import {Suspense} from 'react';
 import WebMCPInit from './WebMCPInit';
 import WebMCPTools from './WebMCPTools';
+import {getSiteUrl} from '@/lib/site-url';
 
 const fontSans = FontSans({
   subsets: ['latin'],
   variable: '--font-sans',
 });
 
+const SITE_DESCRIPTION =
+  'Browser-based tools for Clone Hero charts: drum transcription, lyric alignment, sheet music, and more.';
+
 export const metadata: Metadata = {
-  title: 'Music Charts Tools',
-  description: 'Tools to manage Clone Hero charts',
+  metadataBase: getSiteUrl(),
+  title: {
+    default: 'Music Charts Tools',
+    template: '%s · Music Charts Tools',
+  },
+  description: SITE_DESCRIPTION,
+  // Per-page metadata only sets `title` and `description` and lets Next
+  // auto-fill og:title / og:description / twitter:title /
+  // twitter:description from those. Setting them here too would block
+  // that bubble-up — so root layout only carries fields that genuinely
+  // are site-wide (siteName, card type). The og-image is auto-discovered
+  // from app/opengraph-image.tsx.
+  openGraph: {
+    type: 'website',
+    siteName: 'Music Charts Tools',
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
