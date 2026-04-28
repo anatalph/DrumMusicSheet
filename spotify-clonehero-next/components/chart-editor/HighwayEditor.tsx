@@ -258,6 +258,12 @@ export default function HighwayEditor({
 
       // Scroll by a fixed time amount per wheel tick (25ms).
       // deltaY < 0 = wheel up = scroll forward, deltaY > 0 = backward.
+      // seekToChartTime updates timing fields without resuming the
+      // AudioContext, so back-to-back wheel events don't drift forward
+      // between the seek and a deferred pause (the previous
+      // playChartTime+pause pattern leaked 5–40ms of forward playback per
+      // scroll, sometimes flipping a -25ms backward scroll into a net
+      // forward move).
       const SCROLL_STEP_MS = 25;
       const direction = e.deltaY < 0 ? 1 : -1;
       const currentChartMs = am.chartTime * 1000;
@@ -267,7 +273,7 @@ export default function HighwayEditor({
         Math.min(currentChartMs + direction * SCROLL_STEP_MS, maxChartMs),
       );
 
-      am.playChartTime(targetChartMs / 1000).then(() => am.pause());
+      am.seekToChartTime(targetChartMs / 1000);
 
       // Update cursor tick to match. Round in the scroll direction so the
       // cursor never jumps backward when scrolling forward (or vice versa).
