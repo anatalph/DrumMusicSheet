@@ -847,8 +847,8 @@ function LyricsAlignInner() {
             Add Lyrics To A Chart
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            Add timed, syllable-level lyrics to any Clone Hero chart. Everything
-            runs in your browser.
+            Paste your lyrics — they&rsquo;re automatically synced to the audio,
+            syllable-by-syllable. Runs entirely in your browser.
           </p>
         </header>
 
@@ -869,7 +869,7 @@ function LyricsAlignInner() {
                 <FlowStep
                   Icon={AudioWaveform}
                   label="Align"
-                  desc="Auto-synced"
+                  desc="Automatic"
                 />
                 <FlowArrow />
                 <FlowStep

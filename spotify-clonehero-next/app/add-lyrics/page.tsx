@@ -10,7 +10,7 @@ import AddLyricsClient from './AddLyricsClient';
 export const metadata: Metadata = {
   title: 'Add lyrics to a chart',
   description:
-    'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
+    'Paste your lyrics and they’re automatically synced to any Clone Hero chart, syllable-by-syllable. Runs entirely in your browser.',
 };
 
 export default function Page() {
