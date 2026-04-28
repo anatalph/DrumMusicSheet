@@ -6,14 +6,14 @@ export const contentType = 'image/png';
 
 const SPOTIFY_GREEN = '#1DB954';
 
-// Traditional folk + a classical piece. All compositions are public
-// domain; modern hit covers across different eras make them feel
+// Public-domain compositions only — traditional folk + a classical
+// piece. Modern hit covers across different eras make them feel
 // recognizable rather than dusty.
-const SAMPLE_HISTORY: ReadonlyArray<readonly [string, string]> = [
-  ['Scarborough Fair', 'Traditional'],
-  ['Cotton Eye Joe', 'Traditional'],
-  ['Wayfaring Stranger', 'Traditional'],
-  ['Flight of the Bumblebee', 'Rimsky-Korsakov'],
+const SAMPLE_HISTORY: ReadonlyArray<string> = [
+  'Scarborough Fair',
+  'Cotton Eye Joe',
+  'Wayfaring Stranger',
+  'Flight of the Bumblebee',
 ];
 
 export default function OpengraphImage() {
@@ -75,7 +75,7 @@ export default function OpengraphImage() {
             borderRadius: 16,
             gap: 12,
           }}>
-          {SAMPLE_HISTORY.map(([song, artist]) => (
+          {SAMPLE_HISTORY.map(song => (
             <div
               key={song}
               style={{display: 'flex', alignItems: 'center', gap: 16}}>
@@ -103,14 +103,6 @@ export default function OpengraphImage() {
               <div
                 style={{display: 'flex', fontSize: 26, fontWeight: 600}}>
                 {song}
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  fontSize: 22,
-                  color: 'rgba(255,255,255,0.55)',
-                }}>
-                {artist}
               </div>
             </div>
           ))}
