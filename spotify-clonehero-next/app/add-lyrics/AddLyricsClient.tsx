@@ -387,7 +387,7 @@ function LyricsAlignInner() {
   }, [status]);
 
   // Tear down any AudioManager + audio decode state when leaving the results
-  // view (Re-align, chart reload) or unmounting the page.
+  // view (Re-enter lyrics, chart reload) or unmounting the page.
   useEffect(() => {
     return () => {
       if (editorData) {
@@ -768,7 +768,7 @@ function LyricsAlignInner() {
               setVocalsWaveform(null);
               setStatus('input');
             }}>
-            Re-align
+            Re-enter lyrics
           </Button>
           <Button size="sm" onClick={handleDownload}>
             <Download className="h-4 w-4 mr-1" />
