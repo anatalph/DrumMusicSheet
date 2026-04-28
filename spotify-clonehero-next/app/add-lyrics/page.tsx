@@ -906,9 +906,14 @@ function LyricsAlignInner() {
               {status !== 'processing' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium mb-2">
+                    <label className="block text-sm font-medium mb-1">
                       Paste Lyrics
                     </label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      All pasted text becomes lyrics, so don&apos;t include
+                      non-lyric symbols or section headers like [Verse]. One
+                      line per phrase.
+                    </p>
                     <textarea
                       value={lyrics}
                       onChange={e => setLyrics(e.target.value)}
@@ -921,7 +926,8 @@ function LyricsAlignInner() {
                   <Button
                     onClick={handleAlign}
                     disabled={!lyrics.trim() || showLyricsWarning}
-                    size="lg">
+                    size="lg"
+                    className="w-full sm:w-auto">
                     Align Lyrics
                   </Button>
                 </>
