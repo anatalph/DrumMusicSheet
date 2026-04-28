@@ -26,6 +26,9 @@ import type {
   SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
+import ProcessingView, {
+  type ProcessingStep,
+} from '@/components/ProcessingView';
 import {
   ChartEditorProvider,
   DEFAULT_VOCALS_SCOPE,
@@ -52,36 +55,45 @@ interface LoadedChart {
   sngMetadata?: Record<string, string>;
 }
 
-interface PipelineStep {
-  id: string;
+/**
+ * Mutable per-step state for the alignment pipeline. Keeps the same
+ * fields ProcessingStep wants plus startTime so we can compute
+ * durationMs on completion.
+ */
+interface AlignStepState {
+  key: 'decode' | 'separate' | 'syllabify' | 'align';
   label: string;
   status: 'pending' | 'active' | 'done' | 'error';
-  detail: string;
+  detail?: string;
+  progress?: number;
+  etaSeconds?: number;
   startTime?: number;
   endTime?: number;
 }
 
-const ALIGN_STEPS: PipelineStep[] = [
-  {id: 'decode', label: 'Decoding audio', status: 'pending', detail: ''},
-  {
-    id: 'separate',
-    label: 'Separating vocal stem',
-    status: 'pending',
-    detail: '',
-  },
-  {
-    id: 'syllabify',
-    label: 'Splitting lyrics into syllables',
-    status: 'pending',
-    detail: '',
-  },
-  {
-    id: 'align',
-    label: 'Aligning syllables to audio',
-    status: 'pending',
-    detail: '',
-  },
+const ALIGN_STEPS: AlignStepState[] = [
+  {key: 'decode', label: 'Decoding audio', status: 'pending'},
+  {key: 'separate', label: 'Separating vocal stem', status: 'pending'},
+  {key: 'syllabify', label: 'Splitting lyrics into syllables', status: 'pending'},
+  {key: 'align', label: 'Aligning syllables to audio', status: 'pending'},
 ];
+
+function alignStepsToProcessingSteps(
+  steps: AlignStepState[],
+): ProcessingStep[] {
+  return steps.map(s => ({
+    key: s.key,
+    label: s.label,
+    status: s.status,
+    detail: s.detail,
+    progress: s.progress,
+    etaSeconds: s.etaSeconds,
+    durationMs:
+      s.status === 'done' && s.startTime !== undefined && s.endTime !== undefined
+        ? s.endTime - s.startTime
+        : undefined,
+  }));
+}
 
 type Status =
   | 'idle'
@@ -292,7 +304,7 @@ function LyricsAlignInner() {
   const [alignedSyllables, setAlignedSyllables] = useState<AlignedSyllable[]>(
     [],
   );
-  const [alignSteps, setAlignSteps] = useState<PipelineStep[]>(ALIGN_STEPS);
+  const [alignSteps, setAlignSteps] = useState<AlignStepState[]>(ALIGN_STEPS);
   const [showLyricsWarning, setShowLyricsWarning] = useState(false);
   /**
    * Float32 16kHz mono PCM of the vocals stem used for alignment. Either
@@ -307,13 +319,23 @@ function LyricsAlignInner() {
   const initStartedRef = useRef(false);
 
   const updateAlignStep = useCallback(
-    (id: string, update: Partial<PipelineStep>) => {
+    (key: AlignStepState['key'], update: Partial<AlignStepState>) => {
       setAlignSteps(prev =>
-        prev.map(s => (s.id === id ? {...s, ...update} : s)),
+        prev.map(s => (s.key === key ? {...s, ...update} : s)),
       );
     },
     [],
   );
+
+  // Tick once a second so each in-flight step's elapsed-fallback ETA
+  // re-renders even when no new progress message has arrived. Cheap;
+  // the interval only runs while alignment is processing.
+  const [, setProcessingTick] = useState(0);
+  useEffect(() => {
+    if (status !== 'processing') return;
+    const id = setInterval(() => setProcessingTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   // Preload alignment model in worker once chart is loaded
   useEffect(() => {
@@ -377,7 +399,9 @@ function LyricsAlignInner() {
       ALIGN_STEPS.map(s => ({
         ...s,
         status: 'pending',
-        detail: '',
+        detail: undefined,
+        progress: undefined,
+        etaSeconds: undefined,
         startTime: undefined,
         endTime: undefined,
       })),
@@ -451,7 +475,11 @@ function LyricsAlignInner() {
           '@/lib/lyrics-align/demucs-client'
         );
         vocals16k = await runDemucsInWorker(audioBuffer, p =>
-          updateAlignStep('separate', {detail: p.message}),
+          updateAlignStep('separate', {
+            detail: p.message,
+            progress: p.percent,
+            etaSeconds: p.etaSeconds,
+          }),
         );
 
         updateAlignStep('separate', {
@@ -780,97 +808,115 @@ function LyricsAlignInner() {
           </div>
         )}
 
-        {/* Step 2: Chart loaded — show info + lyrics input */}
-        {chart && (status === 'input' || (status === 'error' && chart)) && (
-          <div className="space-y-6">
-            {/* Chart info */}
-            <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold">
-                  {removeStyleTags(
-                    chart.chartDoc.parsedChart.metadata.name ?? 'Unknown',
-                  )}{' '}
-                  <span className="text-muted-foreground font-normal">by</span>{' '}
-                  {removeStyleTags(
-                    chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown',
-                  )}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Charted by{' '}
-                  {removeStyleTags(
-                    chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown',
-                  )}{' '}
-                  &middot; {chart.audioFiles.length} audio file
-                  {chart.audioFiles.length !== 1 ? 's' : ''}
-                  {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
-                  {chart.sourceFormat === 'sng'
-                    ? '.sng'
-                    : chart.sourceFormat === 'zip'
-                      ? '.zip'
-                      : 'folder'}
-                </p>
-              </div>
-              <ChartDropZone
-                onLoaded={handleChartLoaded}
-                id="add-lyrics-chart"
-              />
-            </div>
-
-            {/* Existing lyrics warning */}
-            {showLyricsWarning && (
-              <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 flex items-start gap-3">
-                <TriangleAlert className="h-4 w-4 mt-0.5 text-yellow-700 dark:text-yellow-300 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    This chart already has lyrics. Aligning will replace them.
+        {/* Steps 2-3: chart loaded — info header stays visible during input AND processing */}
+        {chart &&
+          (status === 'input' ||
+            status === 'processing' ||
+            (status === 'error' && chart)) && (
+            <div className="space-y-6">
+              {/* Chart info */}
+              <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">
+                    {removeStyleTags(
+                      chart.chartDoc.parsedChart.metadata.name ?? 'Unknown',
+                    )}{' '}
+                    <span className="text-muted-foreground font-normal">
+                      by
+                    </span>{' '}
+                    {removeStyleTags(
+                      chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown',
+                    )}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Charted by{' '}
+                    {removeStyleTags(
+                      chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown',
+                    )}{' '}
+                    &middot; {chart.audioFiles.length} audio file
+                    {chart.audioFiles.length !== 1 ? 's' : ''}
+                    {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
+                    {chart.sourceFormat === 'sng'
+                      ? '.sng'
+                      : chart.sourceFormat === 'zip'
+                        ? '.zip'
+                        : 'folder'}
                   </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => setShowLyricsWarning(false)}>
-                    OK, continue
-                  </Button>
                 </div>
+                {status === 'input' && (
+                  <ChartDropZone
+                    onLoaded={handleChartLoaded}
+                    id="add-lyrics-chart"
+                  />
+                )}
               </div>
-            )}
 
-            {/* Lyrics textarea */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Paste Lyrics
-              </label>
-              <textarea
-                value={lyrics}
-                onChange={e => setLyrics(e.target.value)}
-                rows={12}
-                placeholder="Paste the song lyrics here..."
-                className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary resize-y"
-              />
+              {/* Processing card. Renders inside the same column so the
+                  song info header stays at the top while the steps run. */}
+              {status === 'processing' && (
+                <ProcessingView
+                  title="Adding lyrics to your chart"
+                  steps={alignStepsToProcessingSteps(alignSteps)}
+                  error={error}
+                  className="max-w-none"
+                />
+              )}
+
+              {/* Existing lyrics warning */}
+              {status !== 'processing' && showLyricsWarning && (
+                <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 flex items-start gap-3">
+                  <TriangleAlert className="h-4 w-4 mt-0.5 text-yellow-700 dark:text-yellow-300 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                      This chart already has lyrics. Aligning will replace them.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setShowLyricsWarning(false)}>
+                      OK, continue
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Lyrics textarea + Align button. Hidden during processing
+                  so the step list is the only thing in view. */}
+              {status !== 'processing' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Paste Lyrics
+                    </label>
+                    <textarea
+                      value={lyrics}
+                      onChange={e => setLyrics(e.target.value)}
+                      rows={12}
+                      placeholder="Paste the song lyrics here..."
+                      className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary resize-y"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleAlign}
+                    disabled={!lyrics.trim() || showLyricsWarning}
+                    size="lg">
+                    Align Lyrics
+                  </Button>
+                </>
+              )}
+
+              {error && <p className="text-destructive text-sm">{error}</p>}
             </div>
-
-            <Button
-              onClick={handleAlign}
-              disabled={!lyrics.trim() || showLyricsWarning}
-              size="lg">
-              Align Lyrics
-            </Button>
-
-            {error && <p className="text-destructive text-sm">{error}</p>}
-          </div>
-        )}
-
-        {/* Processing */}
-        {status === 'processing' && (
-          <ProgressCard steps={alignSteps} error={error} />
-        )}
+          )}
       </div>
     </main>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Progress Card
+// Flow diagram bits
 // ---------------------------------------------------------------------------
 
 function FlowStep({
@@ -902,110 +948,3 @@ function FlowArrow() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Progress Card
-// ---------------------------------------------------------------------------
-
-function ProgressCard({
-  steps,
-  error,
-}: {
-  steps: PipelineStep[];
-  error: string | null;
-}) {
-  return (
-    <div className="bg-muted rounded-xl p-6 mb-8">
-      <h2 className="text-lg font-semibold mb-4">
-        Adding lyrics to your chart
-      </h2>
-      <div className="space-y-3">
-        {steps.map(step => (
-          <div key={step.id} className="flex items-start gap-3">
-            <div className="mt-0.5 flex-shrink-0 w-5 h-5">
-              {step.status === 'done' && (
-                <svg
-                  className="w-5 h-5 text-green-500"
-                  fill="currentColor"
-                  viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              )}
-              {step.status === 'active' && (
-                <svg
-                  className="w-5 h-5 text-yellow-500 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-              )}
-              {step.status === 'pending' && (
-                <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
-              )}
-              {step.status === 'error' && (
-                <svg
-                  className="w-5 h-5 text-destructive"
-                  fill="currentColor"
-                  viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              )}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span
-                  className={
-                    step.status === 'done'
-                      ? 'text-muted-foreground'
-                      : step.status === 'active'
-                        ? 'text-foreground font-medium'
-                        : step.status === 'error'
-                          ? 'text-destructive'
-                          : 'text-muted-foreground/50'
-                  }>
-                  {step.label}
-                </span>
-                {step.status === 'done' && step.startTime && step.endTime && (
-                  <span className="text-muted-foreground/50 text-xs">
-                    {((step.endTime - step.startTime) / 1000).toFixed(1)}s
-                  </span>
-                )}
-              </div>
-              {step.detail && (
-                <p
-                  className={`text-sm truncate ${
-                    step.status === 'error'
-                      ? 'text-destructive'
-                      : 'text-muted-foreground/70'
-                  }`}>
-                  {step.detail}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      {error && <p className="mt-4 text-destructive text-sm">{error}</p>}
-    </div>
-  );
-}
