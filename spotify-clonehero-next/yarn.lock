@@ -651,10 +651,10 @@
     binary-parser "^2.2.1"
     eventemitter3 "^5.0.1"
 
-"@eliwhite/scan-chart@8.1.0-eliwhite.5":
-  version "8.1.0-eliwhite.5"
-  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-8.1.0-eliwhite.5.tgz#4d93fab60d641f2f4f45d0a573783dfc73432b71"
-  integrity sha512-MIdGBIxc1VgspgmBO3gwTmRQ32ML5I7I5+MgRhMAl7r1FfH+t1FzttXcDgdIkeNJh71mvnNIoeAmOaLXmFBYuw==
+"@eliwhite/scan-chart@8.1.0-eliwhite.6":
+  version "8.1.0-eliwhite.6"
+  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-8.1.0-eliwhite.6.tgz#2204a7d96eaae8cf29292a4bf603a1fc2f0167d6"
+  integrity sha512-3/NFXM+xDM/rVfqPnHulp4zFvEQh+j1Ron50DEXbWGWkAU9gGcXdl9pD9gmt8NQNE6BknWSxJuj5k7KXCcjQfA==
   dependencies:
     "@awasm/noble" "^0.1.1"
     "@geomitron/midi-file" "^1.2.5"
