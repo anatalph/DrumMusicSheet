@@ -264,7 +264,7 @@ export default function HighwayEditor({
       // playChartTime+pause pattern leaked 5–40ms of forward playback per
       // scroll, sometimes flipping a -25ms backward scroll into a net
       // forward move).
-      const SCROLL_STEP_MS = 25;
+      const SCROLL_STEP_MS = 45;
       const direction = e.deltaY < 0 ? 1 : -1;
       const currentChartMs = am.chartTime * 1000;
       const maxChartMs = am.duration * 1000 - am.chartDelay * 1000;
