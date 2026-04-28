@@ -1,7 +1,14 @@
 'use client';
 
 import {useEffect, useState, useCallback, useRef, useMemo} from 'react';
-import {Download, TriangleAlert} from 'lucide-react';
+import {
+  AudioWaveform,
+  ClipboardPaste,
+  Download,
+  FolderOpen,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
 import {toast} from 'sonner';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
@@ -785,17 +792,33 @@ function LyricsAlignInner() {
             {/* Flow diagram */}
             <div className="bg-muted rounded-xl p-6">
               <div className="flex items-center justify-between">
-                <FlowStep icon="📁" label="Open" desc="Your chart" />
+                <FlowStep Icon={FolderOpen} label="Open" desc="Your chart" />
                 <FlowArrow />
-                <FlowStep icon="✏️" label="Paste" desc="Song lyrics" />
+                <FlowStep
+                  Icon={ClipboardPaste}
+                  label="Paste"
+                  desc="Song lyrics"
+                />
                 <FlowArrow />
-                <FlowStep icon="🎵" label="Align" desc="Auto-synced" />
+                <FlowStep
+                  Icon={AudioWaveform}
+                  label="Align"
+                  desc="Auto-synced"
+                />
                 <FlowArrow />
-                <FlowStep icon="📥" label="Download" desc="Updated chart" />
+                <FlowStep
+                  Icon={Download}
+                  label="Download"
+                  desc="Updated chart"
+                />
               </div>
             </div>
 
-            <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
+            <ChartDropZone
+              onLoaded={handleChartLoaded}
+              id="add-lyrics-chart"
+              folderPickerVariant="link"
+            />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         )}
@@ -920,17 +943,19 @@ function LyricsAlignInner() {
 // ---------------------------------------------------------------------------
 
 function FlowStep({
-  icon,
+  Icon,
   label,
   desc,
 }: {
-  icon: string;
+  Icon: LucideIcon;
   label: string;
   desc: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1 min-w-0">
-      <span className="text-3xl">{icon}</span>
+    <div className="flex flex-col items-center gap-2 min-w-0">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background">
+        <Icon className="h-5 w-5 text-muted-foreground" />
+      </span>
       <span className="text-sm font-medium">{label}</span>
       <span className="text-xs text-muted-foreground">{desc}</span>
     </div>
