@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect, useState, useCallback, useRef, useMemo} from 'react';
-import {Download} from 'lucide-react';
+import {Download, TriangleAlert} from 'lucide-react';
 import {toast} from 'sonner';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
@@ -818,17 +818,20 @@ function LyricsAlignInner() {
 
             {/* Existing lyrics warning */}
             {showLyricsWarning && (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-                <p className="text-sm text-yellow-200">
-                  This chart already has lyrics. Aligning will replace them.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => setShowLyricsWarning(false)}>
-                  OK, continue
-                </Button>
+              <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 flex items-start gap-3">
+                <TriangleAlert className="h-4 w-4 mt-0.5 text-yellow-700 dark:text-yellow-300 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    This chart already has lyrics. Aligning will replace them.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => setShowLyricsWarning(false)}>
+                    OK, continue
+                  </Button>
+                </div>
               </div>
             )}
 
