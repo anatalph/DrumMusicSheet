@@ -21,7 +21,10 @@ export interface InputSyllable {
 
 export interface AlignedSyllable {
   text: string;
+  /** Viterbi onset of the syllable's first char (RMS-refined). */
   startMs: number;
+  /** Viterbi END frame of the syllable's last char, in ms (no refinement). */
+  endMs: number;
   joinNext: boolean;
   /** True if this syllable starts a new input lyrics line. */
   newLine: boolean;

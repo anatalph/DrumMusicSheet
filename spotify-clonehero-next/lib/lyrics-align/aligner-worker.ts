@@ -261,6 +261,8 @@ interface AlignedWord {
 interface AlignedSyllable {
   text: string;
   startMs: number;
+  /** Viterbi END frame of the syllable's last char, in ms (no refinement). */
+  endMs: number;
   joinNext: boolean;
   newLine: boolean;
 }
@@ -358,6 +360,7 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   // 2. Build character token sequence from syllables
   //    Insert | between words (where joinNext=false → next syllable starts new word)
   const sylStartPositions: number[] = [];
+  const sylEndPositions: number[] = [];
   const tokens: number[] = [];
   const pipeIdx = label2idx['|'];
 
@@ -376,6 +379,8 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
         tokens.push(idx);
       }
     }
+
+    sylEndPositions.push(tokens.length);
   }
 
   if (tokens.length === 0) throw new Error('No valid tokens in syllables');
@@ -424,9 +429,11 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
 
   // 4. Extract per-syllable timestamps
   // Build token→frame lookup from aligned results (keyed by tokenPos)
-  const tokenFrame = new Map<number, number>();
+  const tokenStartFrame = new Map<number, number>();
+  const tokenEndFrame = new Map<number, number>();
   for (const a of aligned) {
-    tokenFrame.set(a.tokenPos, a.startFrame);
+    tokenStartFrame.set(a.tokenPos, a.startFrame);
+    tokenEndFrame.set(a.tokenPos, a.endFrame);
   }
 
   // Smooth RMS for onset detection
@@ -447,40 +454,56 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
 
   const alignedSyls: AlignedSyllable[] = [];
   for (let si = 0; si < syls.length; si++) {
-    const pos = sylStartPositions[si];
-    const frame = tokenFrame.get(pos);
-    if (frame !== undefined) {
+    const startPos = sylStartPositions[si];
+    const endPos = sylEndPositions[si] - 1; // last char of this syllable
+    const startFrame = tokenStartFrame.get(startPos);
+    const endFrameRaw =
+      endPos >= startPos ? tokenEndFrame.get(endPos) : undefined;
+
+    if (startFrame !== undefined) {
       // Onset refinement: snap to steepest RMS rise within ±4 frames
-      let bestFrame = frame;
+      let bestFrame = startFrame;
       let bestRise = 0;
-      for (let f = Math.max(1, frame - 4); f < Math.min(T, frame + 5); f++) {
+      for (
+        let f = Math.max(1, startFrame - 4);
+        f < Math.min(T, startFrame + 5);
+        f++
+      ) {
         const rise = rmsSmoothed[f] - rmsSmoothed[f - 1];
         if (rise > bestRise) {
           bestRise = rise;
           bestFrame = f;
         }
       }
-      const ms = (bestFrame / T) * durationMs;
+      const startMs = (bestFrame / T) * durationMs;
+      const endMs =
+        endFrameRaw !== undefined ? (endFrameRaw / T) * durationMs : startMs;
       alignedSyls.push({
         text: syls[si].text,
-        startMs: ms,
+        startMs,
+        endMs,
         joinNext: syls[si].joinNext,
         newLine: syls[si].newLine,
       });
     } else if (alignedSyls.length > 0) {
+      const prev = alignedSyls[alignedSyls.length - 1];
       alignedSyls.push({
         text: syls[si].text,
-        startMs: alignedSyls[alignedSyls.length - 1].startMs,
+        startMs: prev.startMs,
+        endMs: prev.endMs,
         joinNext: syls[si].joinNext,
         newLine: syls[si].newLine,
       });
     }
   }
 
-  // Enforce monotonicity
+  // Enforce monotonicity (start and end)
   for (let i = 1; i < alignedSyls.length; i++) {
     if (alignedSyls[i].startMs < alignedSyls[i - 1].startMs) {
       alignedSyls[i].startMs = alignedSyls[i - 1].startMs;
+    }
+    if (alignedSyls[i].endMs < alignedSyls[i].startMs) {
+      alignedSyls[i].endMs = alignedSyls[i].startMs;
     }
   }
 
