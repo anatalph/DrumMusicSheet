@@ -1,8 +1,9 @@
 import WelcomeCard from './WelcomeCard';
 
 export const metadata = {
-  title: 'Spotfy Chart Finder',
-  description: 'Find Charts for songs in your Spotify Library',
+  title: 'Spotify Chart Finder',
+  description:
+    'Find Clone Hero charts for songs in your Spotify library. Runs entirely in your browser.',
 };
 
 export default function Page() {

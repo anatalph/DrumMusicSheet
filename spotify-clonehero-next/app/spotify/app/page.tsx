@@ -3,8 +3,9 @@ import dynamic from 'next/dynamic';
 const Spotify = dynamic(() => import('./Spotify'));
 
 export const metadata = {
-  title: 'Spotfy Chart Finder',
-  description: 'Find Charts for songs in your Spotify Library',
+  title: 'Spotify Chart Finder',
+  description:
+    'Find Clone Hero charts for songs in your Spotify library. Runs entirely in your browser.',
 };
 
 export default function Page() {

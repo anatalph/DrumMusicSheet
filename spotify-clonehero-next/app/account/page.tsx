@@ -2,6 +2,12 @@ import {redirect} from 'next/navigation';
 import AccountClient from './AccountClient';
 import {createClient} from '@/lib/supabase/server';
 
+export const metadata = {
+  title: 'Account',
+  description:
+    'Manage your saved Clone Hero charts and linked Spotify identity.',
+};
+
 export default async function AccountPage() {
   const supabase = await createClient();
   const {data, error} = await supabase.auth.getUser();

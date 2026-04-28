@@ -3,6 +3,8 @@ import Search from './Search';
 
 export const metadata = {
   title: 'Karaoke Video Generator',
+  description:
+    'Turn any Clone Hero chart into a karaoke video with synced lyrics and album art. Runs entirely in your browser.',
 };
 
 export default async function Page({

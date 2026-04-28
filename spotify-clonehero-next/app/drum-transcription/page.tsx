@@ -1,13 +1,8 @@
-import type {Metadata} from 'next';
 import DrumTranscriptionClient from './DrumTranscriptionClient';
 
-// Title + description only — root layout's openGraph/twitter blocks
-// pick up the rest. See app/layout.tsx for the merge rules.
-export const metadata: Metadata = {
-  title: 'Transcribe drums from audio',
-  description:
-    'Upload a song, get a Clone Hero drum chart. AI stem-separation and transcription, all in your browser.',
-};
+// No per-page metadata: the feature isn't shipped yet, so we don't
+// want unfurl cards advertising it. The route still works for
+// development; it just inherits the site-wide title/description.
 
 export default function Page() {
   return <DrumTranscriptionClient />;

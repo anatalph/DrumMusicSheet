@@ -3,6 +3,8 @@ import Search from './Search';
 
 export const metadata = {
   title: 'Sheet Music for Drums',
+  description:
+    'View Clone Hero drum charts as sheet music with synced click tracks and per-stem audio control. Practice and play along, all in your browser.',
 };
 
 export default async function Page({

@@ -44,23 +44,40 @@ export default function OpengraphImage() {
             fontSize: 36,
             color: 'rgba(255,255,255,0.7)',
             textAlign: 'center',
-            maxWidth: '80%',
+            maxWidth: '85%',
           }}>
-          Browser-based tools for Clone Hero charts
+          Tools for finding, viewing, and working with Clone Hero charts
         </div>
         <div
           style={{
             display: 'flex',
-            gap: 40,
-            marginTop: 60,
-            fontSize: 22,
-            color: 'rgba(255,255,255,0.55)',
+            flexDirection: 'column',
+            gap: 12,
+            marginTop: 56,
+            fontSize: 24,
+            color: 'rgba(255,255,255,0.65)',
           }}>
-          <span>Drum transcription</span>
-          <span>·</span>
-          <span>Lyric alignment</span>
-          <span>·</span>
-          <span>Sheet music</span>
+          <div style={{display: 'flex'}}>
+            <span style={{color: 'white', fontWeight: 600}}>
+              Spotify Chart Finder
+            </span>
+            <span style={{margin: '0 12px', opacity: 0.4}}>—</span>
+            <span>find songs you know from Spotify</span>
+          </div>
+          <div style={{display: 'flex'}}>
+            <span style={{color: 'white', fontWeight: 600}}>
+              Drum Sheet Music
+            </span>
+            <span style={{margin: '0 12px', opacity: 0.4}}>—</span>
+            <span>view drum charts as sheet music</span>
+          </div>
+          <div style={{display: 'flex'}}>
+            <span style={{color: 'white', fontWeight: 600}}>
+              Lyric Alignment
+            </span>
+            <span style={{margin: '0 12px', opacity: 0.4}}>—</span>
+            <span>add lyrics to charts</span>
+          </div>
         </div>
       </div>
     ),

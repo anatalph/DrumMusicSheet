@@ -20,7 +20,7 @@ const fontSans = FontSans({
 });
 
 const SITE_DESCRIPTION =
-  'Browser-based tools for Clone Hero charts: drum transcription, lyric alignment, sheet music, and more.';
+  'Tools for finding, viewing, and working with Clone Hero charts: find songs you know from Spotify, view drum charts as sheet music, add lyrics to charts, and more — all in your browser.';
 
 export const metadata: Metadata = {
   metadataBase: getSiteUrl(),
