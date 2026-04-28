@@ -239,47 +239,6 @@ function deduplicatePhrases(
   return result;
 }
 
-/**
- * Merge adjacent short phrase-lines into longer display lines.
- */
-function mergeShortLines(lines: LyricLine[]): LyricLine[] {
-  if (lines.length === 0) return lines;
-
-  const merged: LyricLine[] = [lines[0]];
-
-  for (let i = 1; i < lines.length; i++) {
-    const prev = merged[merged.length - 1];
-    const curr = lines[i];
-    const combinedText = prev.text + ' ' + curr.text;
-    const prevEnd = prev.syllables[prev.syllables.length - 1].msTime;
-    const gap = curr.phraseStartMs - prevEnd;
-
-    if (
-      prev.text.length < 30 &&
-      curr.text.length < 30 &&
-      combinedText.length <= 50 &&
-      gap < 800
-    ) {
-      const currSyllables = [...curr.syllables];
-      currSyllables[0] = {
-        ...currSyllables[0],
-        text: ' ' + currSyllables[0].text.trimStart(),
-      };
-      const mergedLine = makeLine([...prev.syllables, ...currSyllables]);
-      mergedLine.phraseStartMs = Math.min(
-        prev.phraseStartMs,
-        curr.phraseStartMs,
-      );
-      mergedLine.phraseEndMs = Math.max(prev.phraseEndMs, curr.phraseEndMs);
-      merged[merged.length - 1] = mergedLine;
-    } else {
-      merged.push(curr);
-    }
-  }
-
-  return merged;
-}
-
 /** Default duration after last syllable start when no vocal phrase marker exists. */
 const DEFAULT_LAST_SYLLABLE_DURATION_MS = 500;
 
@@ -307,7 +266,7 @@ export function parseLyrics(
   const phrases = deduplicatePhrases(vocalPhrases);
   const lines =
     phrases.length > 0
-      ? mergeShortLines(groupByPhrases(syllables, phrases))
+      ? groupByPhrases(syllables, phrases)
       : groupByHeuristic(syllables);
 
   return splitLongLines(lines);
