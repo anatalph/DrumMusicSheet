@@ -45,6 +45,12 @@ export interface EditorCapabilities {
    * Add-lyrics pins the highway to Waveform, so the toggle is hidden.
    */
   showHighwayModeToggle: boolean;
+  /**
+   * Show the sidebar's Vocal Part picker on multi-part vocal charts.
+   * Add-lyrics suppresses this — the aligner only writes lyrics to the
+   * primary vocals track, so exposing other parts would mislead.
+   */
+  showVocalPartPicker: boolean;
 }
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
@@ -55,6 +61,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showDrumLanes: true,
   showToolPalette: true,
   showHighwayModeToggle: true,
+  showVocalPartPicker: true,
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -65,4 +72,5 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showDrumLanes: false,
   showToolPalette: false,
   showHighwayModeToggle: false,
+  showVocalPartPicker: false,
 };

@@ -119,6 +119,11 @@ describe('EditorCapabilities preset shape', () => {
     expect(ADD_LYRICS_CAPABILITIES.showNotePlacementTools).toBe(false);
   });
 
+  it('hides the vocal-part picker on ADD_LYRICS (aligner only writes vocals)', () => {
+    expect(DRUM_EDIT_CAPABILITIES.showVocalPartPicker).toBe(true);
+    expect(ADD_LYRICS_CAPABILITIES.showVocalPartPicker).toBe(false);
+  });
+
   it('every draggable kind is selectable (drag implies select)', () => {
     for (const preset of [DRUM_EDIT_CAPABILITIES, ADD_LYRICS_CAPABILITIES]) {
       for (const kind of preset.draggable) {

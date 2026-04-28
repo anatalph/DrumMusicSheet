@@ -93,6 +93,8 @@ export default function LeftSidebar({
   const canFaster = speedIdx < SPEED_PRESETS.length - 1;
 
   // Vocal-part picker. Only renders when:
+  //   - the page exposes the picker (add-lyrics suppresses it — the aligner
+  //     only writes to the primary vocals track)
   //   - the active scope is vocals (else there's nothing to pick)
   //   - the chart actually has more than one part (single-part charts hide it)
   // Part names follow scan-chart's NormalizedVocalTrack.parts shape.
@@ -101,7 +103,9 @@ export default function LeftSidebar({
       ? Object.keys(state.chartDoc?.parsedChart.vocalTracks?.parts ?? {})
       : [];
   const showVocalPartPicker =
-    state.activeScope.kind === 'vocals' && vocalParts.length > 1;
+    capabilities.showVocalPartPicker &&
+    state.activeScope.kind === 'vocals' &&
+    vocalParts.length > 1;
 
   return (
     <TooltipProvider delayDuration={300}>
