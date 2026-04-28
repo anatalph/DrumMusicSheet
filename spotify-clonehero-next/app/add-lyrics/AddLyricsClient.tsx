@@ -1081,57 +1081,19 @@ function ReplaceChartButton({
   );
 
   const handlePickFolder = useCallback(async () => {
-    const t0 = performance.now();
-    console.log('[ReplaceChart:pickFolder] click', {
-      isLoading,
-      hasUserActivation:
-        (navigator as any).userActivation?.isActive ?? 'unsupported',
-      hasShowDirectoryPicker:
-        typeof window.showDirectoryPicker === 'function',
-      visibility: document.visibilityState,
-      hasFocus: document.hasFocus(),
-    });
-    if (isLoading) {
-      console.log('[ReplaceChart:pickFolder] early-return (loading)');
-      return;
-    }
-    let blurred = false;
-    const onBlur = () => {
-      blurred = true;
-      console.log('[ReplaceChart:pickFolder] window.blur fired (picker likely opened)');
-    };
-    window.addEventListener('blur', onBlur, {once: true});
-    const watchdog = window.setTimeout(() => {
-      console.log('[ReplaceChart:pickFolder] watchdog 1500ms', {
-        blurred,
-        hasFocus: document.hasFocus(),
-        visibility: document.visibilityState,
-      });
-    }, 1500);
+    if (isLoading) return;
     try {
-      console.log('[ReplaceChart:pickFolder] calling showDirectoryPicker');
       const dirHandle = await window.showDirectoryPicker({
         id: 'add-lyrics-chart',
-      });
-      console.log('[ReplaceChart:pickFolder] resolved', {
-        dt: Math.round(performance.now() - t0),
-        name: dirHandle.name,
       });
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);
     } catch (e) {
       const err = e as DOMException;
-      console.log('[ReplaceChart:pickFolder] threw', {
-        name: err?.name,
-        message: err?.message,
-        dt: Math.round(performance.now() - t0),
-      });
       if (err?.name === 'AbortError') return;
       toast.error(err?.message ?? 'Failed to read directory');
     } finally {
-      window.removeEventListener('blur', onBlur);
-      window.clearTimeout(watchdog);
       setIsLoading(false);
     }
   }, [isLoading, onLoaded]);

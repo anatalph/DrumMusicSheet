@@ -90,56 +90,16 @@ export default function ChartDropZone({
   );
 
   const handlePickFolder = useCallback(async () => {
-    const t0 = performance.now();
-    console.log('[ChartDropZone:pickFolder] click', {
-      id,
-      disabled,
-      isLoading,
-      hasUserActivation:
-        (navigator as any).userActivation?.isActive ?? 'unsupported',
-      hasShowDirectoryPicker:
-        typeof window.showDirectoryPicker === 'function',
-      visibility: document.visibilityState,
-      hasFocus: document.hasFocus(),
-    });
-    if (disabled || isLoading) {
-      console.log('[ChartDropZone:pickFolder] early-return (disabled/loading)');
-      return;
-    }
-    let blurred = false;
-    const onBlur = () => {
-      blurred = true;
-      console.log('[ChartDropZone:pickFolder] window.blur fired (picker likely opened)');
-    };
-    window.addEventListener('blur', onBlur, {once: true});
-    const watchdog = window.setTimeout(() => {
-      console.log('[ChartDropZone:pickFolder] watchdog 1500ms', {
-        blurred,
-        hasFocus: document.hasFocus(),
-        visibility: document.visibilityState,
-      });
-    }, 1500);
+    if (disabled || isLoading) return;
     try {
-      console.log('[ChartDropZone:pickFolder] calling showDirectoryPicker');
       const dirHandle = await window.showDirectoryPicker({id});
-      console.log('[ChartDropZone:pickFolder] resolved', {
-        dt: Math.round(performance.now() - t0),
-        name: dirHandle.name,
-      });
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);
     } catch (e: any) {
-      console.log('[ChartDropZone:pickFolder] threw', {
-        name: e?.name,
-        message: e?.message,
-        dt: Math.round(performance.now() - t0),
-      });
       if (e.name === 'AbortError') return; // User cancelled
       toast.error(e.message ?? 'Failed to read directory');
     } finally {
-      window.removeEventListener('blur', onBlur);
-      window.clearTimeout(watchdog);
       setIsLoading(false);
     }
   }, [onLoaded, disabled, isLoading, id]);
