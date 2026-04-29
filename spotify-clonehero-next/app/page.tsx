@@ -50,21 +50,16 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
-            <CardTitle>Spotify History (advanced!)</CardTitle>
+            <CardTitle>Add Lyrics to a Chart</CardTitle>
             <CardDescription>
-              If you&apos;ve downloaded your{' '}
-              <a
-                href="https://www.spotify.com/us/account/privacy/"
-                className="text-accent-foreground">
-                Extended Streaming History <RxExternalLink className="inline" />
-              </a>{' '}
-              from your Spotify Account settings, this will find charts to songs
-              you&apos;ve ever listened to.
+              Paste your lyrics and they&apos;re automatically synced to any
+              Clone Hero chart, syllable-by-syllable. Runs entirely in your
+              browser.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 py-4">
             <Link
-              href="spotifyhistory"
+              href="add-lyrics"
               className={buttonVariants({variant: 'default'})}>
               Go to Tool
             </Link>
@@ -90,6 +85,28 @@ export default function Home() {
               Try the Beta
             </Link>
           </CardFooter>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>Spotify History (advanced!)</CardTitle>
+            <CardDescription>
+              If you&apos;ve downloaded your{' '}
+              <a
+                href="https://www.spotify.com/us/account/privacy/"
+                className="text-accent-foreground">
+                Extended Streaming History <RxExternalLink className="inline" />
+              </a>{' '}
+              from your Spotify Account settings, this will find charts to songs
+              you&apos;ve ever listened to.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link
+              href="spotifyhistory"
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
         </Card>
       </section>
     </main>
