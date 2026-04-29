@@ -30,66 +30,66 @@ export default function OpengraphImage() {
             'linear-gradient(135deg, #1a0a1f 0%, #2c0e36 50%, #0a0a14 100%)',
           color: 'white',
           fontFamily: 'system-ui, sans-serif',
-          padding: '72px 80px',
+          padding: '70px 80px',
         }}>
         <div
           style={{
             display: 'flex',
-            fontSize: 18,
-            color: 'rgba(255,255,255,0.5)',
+            fontSize: 28,
+            color: 'rgba(255,255,255,0.55)',
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            marginBottom: 14,
+            marginBottom: 22,
           }}>
           Music Charts Tools
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 88,
+            fontSize: 110,
             fontWeight: 800,
             letterSpacing: '-0.03em',
-            lineHeight: 1,
-            marginBottom: 22,
+            lineHeight: 1.05,
+            marginBottom: 28,
           }}>
           Spotify Chart Finder
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 30,
-            color: 'rgba(255,255,255,0.72)',
-            maxWidth: 940,
-            lineHeight: 1.3,
-            marginBottom: 56,
+            fontSize: 42,
+            color: 'rgba(255,255,255,0.78)',
+            maxWidth: 1040,
+            lineHeight: 1.25,
+            marginBottom: 48,
           }}>
-          Scan your Spotify playlists for songs with Clone Hero charts.
+            Scan your Spotify playlists for Clone Hero charts.
         </div>
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            padding: '24px 32px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 16,
-            gap: 14,
+            padding: '32px 40px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 20,
+            gap: 22,
           }}>
           {SAMPLE_PLAYLISTS.map(([playlist, found, total]) => (
             <div
               key={playlist}
-              style={{display: 'flex', alignItems: 'center', gap: 18}}>
+              style={{display: 'flex', alignItems: 'center', gap: 24}}>
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
                   background: SPOTIFY_GREEN,
                 }}>
-                <svg width="16" height="16" viewBox="0 0 14 14">
+                <svg width="26" height="26" viewBox="0 0 14 14">
                   <path
                     d="M3 7 L6 10 L11 4"
                     fill="none"
@@ -103,7 +103,7 @@ export default function OpengraphImage() {
               <div
                 style={{
                   display: 'flex',
-                  fontSize: 28,
+                  fontSize: 40,
                   fontWeight: 600,
                   flex: 1,
                 }}>
@@ -112,13 +112,12 @@ export default function OpengraphImage() {
               <div
                 style={{
                   display: 'flex',
-                  fontSize: 24,
-                  color: 'rgba(255,255,255,0.6)',
+                  fontSize: 36,
+                  color: 'rgba(255,255,255,0.7)',
                 }}>
-                <span style={{color: 'white', fontWeight: 600}}>{found}</span>
-                <span style={{margin: '0 4px', opacity: 0.5}}>/</span>
+                <span style={{color: 'white', fontWeight: 700}}>{found}</span>
+                <span style={{margin: '0 6px', opacity: 0.5}}>/</span>
                 <span>{total}</span>
-                <span style={{marginLeft: 8}}>charts found</span>
               </div>
             </div>
           ))}

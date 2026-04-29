@@ -5,8 +5,8 @@ export const size = {width: 1200, height: 630};
 export const contentType = 'image/png';
 
 // Public-domain example: opening of "The Wellerman" (traditional sea
-// shanty). Six syllables show the syllable-level granularity, with one
-// multi-syllable word ("Wellerman") split across three cells.
+// shanty). One multi-syllable word ("Wellerman") split across three
+// cells shows the syllable-level granularity at a glance.
 const SAMPLE_SYLLABLES: ReadonlyArray<readonly [string, string]> = [
   ['Soon', '0:02.10'],
   ['may', '0:02.45'],
@@ -29,87 +29,73 @@ export default function OpengraphImage() {
             'linear-gradient(135deg, #1a0a1f 0%, #2c0e36 50%, #0a0a14 100%)',
           color: 'white',
           fontFamily: 'system-ui, sans-serif',
-          padding: '72px 80px',
+          padding: '70px 80px',
         }}>
         <div
           style={{
             display: 'flex',
-            fontSize: 18,
-            color: 'rgba(255,255,255,0.5)',
+            fontSize: 28,
+            color: 'rgba(255,255,255,0.55)',
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            marginBottom: 14,
+            marginBottom: 22,
           }}>
           Music Charts Tools
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 88,
+            fontSize: 110,
             fontWeight: 800,
             letterSpacing: '-0.03em',
-            lineHeight: 1,
-            marginBottom: 22,
+            lineHeight: 1.05,
+            marginBottom: 28,
           }}>
           Add Lyrics to Charts
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 30,
-            color: 'rgba(255,255,255,0.72)',
-            maxWidth: 940,
-            lineHeight: 1.3,
-            marginBottom: 56,
+            fontSize: 42,
+            color: 'rgba(255,255,255,0.78)',
+            maxWidth: 1040,
+            lineHeight: 1.25,
+            marginBottom: 48,
           }}>
-          Paste plain lyrics — they&rsquo;re automatically synced to the audio,
-          syllable-by-syllable.
+          Paste lyrics — auto-synced to any chart, syllable by syllable.
         </div>
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
-            padding: '28px 36px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 16,
+            padding: '32px 44px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 20,
+            gap: 36,
           }}>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 14,
-              color: 'rgba(255,255,255,0.5)',
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              marginBottom: 18,
-            }}>
-            Auto-aligned
-          </div>
-          <div style={{display: 'flex', gap: 36}}>
-            {SAMPLE_SYLLABLES.map(([syl, time]) => (
+          {SAMPLE_SYLLABLES.map(([syl, time]) => (
+            <div
+              key={syl + time}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}>
+              <div style={{display: 'flex', fontSize: 64, fontWeight: 600}}>
+                {syl}
+              </div>
               <div
-                key={syl + time}
                 style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
+                  fontSize: 28,
+                  color: 'rgba(255,255,255,0.6)',
+                  fontFamily: 'monospace',
+                  marginTop: 10,
                 }}>
-                <div style={{display: 'flex', fontSize: 44, fontWeight: 600}}>
-                  {syl}
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    fontSize: 18,
-                    color: 'rgba(255,255,255,0.45)',
-                    fontFamily: 'monospace',
-                    marginTop: 8,
-                  }}>
-                  {time}
-                </div>
+                {time}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     ),

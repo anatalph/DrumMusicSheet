@@ -34,62 +34,61 @@ export default function OpengraphImage() {
         <div
           style={{
             display: 'flex',
-            fontSize: 18,
-            color: 'rgba(255,255,255,0.5)',
+            fontSize: 28,
+            color: 'rgba(255,255,255,0.55)',
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            marginBottom: 14,
+            marginBottom: 22,
           }}>
           Music Charts Tools
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 80,
+            fontSize: 92,
             fontWeight: 800,
             letterSpacing: '-0.03em',
-            lineHeight: 1,
-            marginBottom: 20,
+            lineHeight: 1.05,
+            marginBottom: 28,
           }}>
-          Spotify History Chart Finder
+          Spotify History Charts
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 28,
-            color: 'rgba(255,255,255,0.72)',
-            maxWidth: 980,
-            lineHeight: 1.3,
-            marginBottom: 40,
+            fontSize: 36,
+            color: 'rgba(255,255,255,0.78)',
+            maxWidth: 1040,
+            lineHeight: 1.25,
+            marginBottom: 36,
           }}>
-          Find Clone Hero charts for every song you&rsquo;ve ever listened to
-          on Spotify.
+            Find charts for every song you&rsquo;ve listened to on Spotify.
         </div>
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            padding: '22px 30px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 16,
-            gap: 12,
+            padding: '28px 36px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 20,
+            gap: 18,
           }}>
           {SAMPLE_HISTORY.map(song => (
             <div
               key={song}
-              style={{display: 'flex', alignItems: 'center', gap: 16}}>
+              style={{display: 'flex', alignItems: 'center', gap: 22}}>
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 26,
-                  height: 26,
-                  borderRadius: 13,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
                   background: SPOTIFY_GREEN,
                 }}>
-                <svg width="14" height="14" viewBox="0 0 14 14">
+                <svg width="22" height="22" viewBox="0 0 14 14">
                   <path
                     d="M3 7 L6 10 L11 4"
                     fill="none"
@@ -101,42 +100,11 @@ export default function OpengraphImage() {
                 </svg>
               </div>
               <div
-                style={{display: 'flex', fontSize: 26, fontWeight: 600}}>
+                style={{display: 'flex', fontSize: 38, fontWeight: 600}}>
                 {song}
               </div>
             </div>
           ))}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-              marginTop: 4,
-            }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 26,
-                height: 26,
-                borderRadius: 13,
-                border: '1px dashed rgba(255,255,255,0.35)',
-                color: 'rgba(255,255,255,0.55)',
-                fontSize: 16,
-                fontWeight: 700,
-              }}>
-              +
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                fontSize: 22,
-                color: 'rgba(255,255,255,0.55)',
-              }}>
-              and thousands more from your listening history
-            </div>
-          </div>
         </div>
       </div>
     ),

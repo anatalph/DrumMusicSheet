@@ -27,6 +27,7 @@ export default function MyComponent({md5}: {md5: string}) {
         console.error('No track found for md5', md5);
         return;
       }
+      document.title = `${track.name} by ${track.artist} — Drum Sheet Music · Music Charts Tools`;
       const {chart, audioFiles} = await getChartAndAudioFiles(track);
       setRendering({
         metadata: track,

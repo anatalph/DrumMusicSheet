@@ -28,18 +28,18 @@ function fallback(label: string) {
         <div
           style={{
             display: 'flex',
-            fontSize: 18,
-            color: 'rgba(255,255,255,0.5)',
+            fontSize: 30,
+            color: 'rgba(255,255,255,0.55)',
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            marginBottom: 16,
+            marginBottom: 22,
           }}>
           Drum Sheet Music
         </div>
         <div
           style={{
             display: 'flex',
-            fontSize: 64,
+            fontSize: 88,
             fontWeight: 800,
             letterSpacing: '-0.02em',
           }}>
@@ -82,47 +82,47 @@ export default async function OpengraphImage({
         }}>
         <img
           src={albumArt}
-          width={360}
-          height={360}
-          style={{borderRadius: 16, objectFit: 'cover'}}
+          width={420}
+          height={420}
+          style={{borderRadius: 20, objectFit: 'cover'}}
         />
         <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
           <div
             style={{
               display: 'flex',
-              fontSize: 18,
+              fontSize: 28,
               color: 'rgba(255,255,255,0.55)',
               letterSpacing: '0.22em',
               textTransform: 'uppercase',
-              marginBottom: 18,
+              marginBottom: 22,
             }}>
             Drum Sheet Music
           </div>
           <div
             style={{
               display: 'flex',
-              fontSize: 64,
+              fontSize: 80,
               fontWeight: 800,
               letterSpacing: '-0.02em',
               lineHeight: 1.05,
-              marginBottom: 14,
+              marginBottom: 18,
             }}>
             {chart.name}
           </div>
           <div
             style={{
               display: 'flex',
-              fontSize: 32,
-              color: 'rgba(255,255,255,0.78)',
-              marginBottom: 10,
+              fontSize: 46,
+              color: 'rgba(255,255,255,0.82)',
+              marginBottom: 16,
             }}>
             {chart.artist}
           </div>
           <div
             style={{
               display: 'flex',
-              fontSize: 22,
-              color: 'rgba(255,255,255,0.45)',
+              fontSize: 32,
+              color: 'rgba(255,255,255,0.55)',
             }}>
             Charted by {chart.charter}
           </div>
