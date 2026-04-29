@@ -2,14 +2,14 @@
 
 import {useEffect, useState} from 'react';
 import {GoogleAnalytics} from '@next/third-parties/google';
-import {CONSENT_REGION_COOKIE} from '@/lib/analytics/consent';
+import {REGION_COOKIE} from '@/lib/analytics/region';
 
 function readRegion(): string | null {
   if (typeof document === 'undefined') return null;
   for (const part of document.cookie.split(/;\s*/)) {
     const eq = part.indexOf('=');
     if (eq === -1) continue;
-    if (part.slice(0, eq) !== CONSENT_REGION_COOKIE) continue;
+    if (part.slice(0, eq) !== REGION_COOKIE) continue;
     return part.slice(eq + 1) || null;
   }
   return null;

@@ -617,12 +617,12 @@ export default function SpotifyTableDownloader({
 
   // Filters fires its initial empty selection on mount via a useEffect; skip
   // that one to avoid spurious "filter changed to nothing" events.
-  const filtersChangeFiredRef = useRef(false);
+  const skippedInitialFilterFireRef = useRef(false);
   const filtersChangedCallback = useCallback(
     (filters: AllowedInstrument[]) => {
       setInstrumentFilters(filters);
-      if (!filtersChangeFiredRef.current) {
-        filtersChangeFiredRef.current = true;
+      if (!skippedInitialFilterFireRef.current) {
+        skippedInitialFilterFireRef.current = true;
         return;
       }
       track({

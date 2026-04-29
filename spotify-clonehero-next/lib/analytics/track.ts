@@ -5,6 +5,9 @@ export type AnalyticsEvent =
   | {event: 'charts_scanned'; value: number}
   | {
       event: 'chart_downloaded';
+      // 'sheet_music' / 'karaoke' are forward-declared — those flows can
+      // already trigger downloads but don't yet thread `source` through.
+      // Wire them when the relevant pages start passing it.
       source:
         | 'spotify'
         | 'spotify_history'
@@ -59,10 +62,27 @@ export type AnalyticsEvent =
       manualMoveCount: number;
     };
 
+// Latest user_id passed to setAnalyticsUserId. AuthProvider's effect
+// can resolve before gtag.js loads, in which case the immediate
+// gtag('set', ...) call below is a no-op (window.gtag undefined).
+// `track()` re-pushes on every event so the value lands as soon as
+// gtag is available.
+//   undefined → never set (don't push anything)
+//   null      → explicitly cleared (push undefined to clear in GA)
+//   string    → signed-in user UUID
+let cachedUserId: string | null | undefined = undefined;
+
+function applyUserId(): void {
+  if (cachedUserId === undefined) return;
+  if (typeof window === 'undefined' || !window.gtag) return;
+  window.gtag('set', {user_id: cachedUserId ?? undefined});
+}
+
 // `sendGAEvent` flattens object params onto the GA4 `event` payload, so a
 // typed wrapper is enough — no per-event parameter mapping needed.
 export function track(payload: AnalyticsEvent): void {
   try {
+    applyUserId();
     sendGAEvent(payload);
   } catch {
     // Analytics never throws into product code.
@@ -72,8 +92,9 @@ export function track(payload: AnalyticsEvent): void {
 // Stitches sessions across devices for logged-in users. Pass null on
 // sign-out to clear. UUID only (no email/PII).
 export function setAnalyticsUserId(userId: string | null): void {
+  cachedUserId = userId;
   try {
-    window.gtag?.('set', {user_id: userId ?? undefined});
+    applyUserId();
   } catch {
     // ignore
   }

@@ -23,11 +23,11 @@ export default function PrivacyPage() {
 
       <p>
         We use Google Analytics 4 (measurement ID <code>G-LEE7EDJH14</code>)
-        only for visitors <strong>outside</strong> the EEA, UK, and
-        Switzerland. The classification happens at the edge: our proxy reads
+        only for visitors <strong>outside</strong>{' '}
+        the EEA, UK, and Switzerland. The classification happens at the edge: our proxy reads
         Vercel&apos;s <code>x-vercel-ip-country</code> header on the first
-        request and writes a <code>gaConsent.region=eea|other</code> cookie.
-        For visitors classified as <code>eea</code>, the page does not load
+        request and writes a <code>gaRegion=eea|other</code> cookie. For
+        visitors classified as <code>eea</code>, the page does not load{' '}
         <code>gtag.js</code> or any other analytics script — there is no
         analytics processing happening, so there is nothing to consent to.
         The IP itself is not stored or sent to Google Analytics; only the
@@ -43,7 +43,7 @@ export default function PrivacyPage() {
           Custom events for feature usage and conversion funnels — e.g.
           &quot;a chart was downloaded from the Spotify page&quot;, &quot;a
           sheet-music viewer was opened&quot;, &quot;a lyric was manually
-          moved before export&quot;. The full list lives in
+          moved before export&quot;. The full list lives in{' '}
           <code>lib/analytics/track.ts</code> in the source repo.
         </li>
         <li>
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
         <li>
           Browser tracking-protection features: uBlock Origin,
           Brave&apos;s shields, Firefox&apos;s Enhanced Tracking Protection,
-          Safari&apos;s Intelligent Tracking Prevention. All of these block
+          Safari&apos;s Intelligent Tracking Prevention. All of these block{' '}
           <code>gtag.js</code> by default or on demand.
         </li>
       </ul>

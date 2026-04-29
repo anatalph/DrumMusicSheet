@@ -222,6 +222,10 @@ export class MoveEntitiesCommand implements EditCommand {
   private readonly ctx: EntityContext;
 
   constructor(
+    // `kind` is part of the public surface so consumers iterating over
+    // the undo stack (e.g. add-lyrics' manualMoveCount export metric) can
+    // filter by entity kind without reflection. `readonly` keeps the
+    // assignment-only contract intact.
     readonly kind: EntityKind,
     private ids: readonly string[],
     private tickDelta: number,
