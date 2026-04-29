@@ -3,6 +3,7 @@
 import {createContext, useContext, useEffect, useState} from 'react';
 import {User} from '@supabase/supabase-js';
 import {createClient} from './client';
+import {setAnalyticsUserId} from '@/lib/analytics/track';
 
 type AuthContextType = {
   user: User | null;
@@ -49,6 +50,10 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
 
     return () => subscription.unsubscribe();
   }, [supabase.auth]);
+
+  useEffect(() => {
+    setAnalyticsUserId(user?.id ?? null);
+  }, [user?.id]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

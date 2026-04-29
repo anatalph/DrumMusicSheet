@@ -565,7 +565,11 @@ function SpotifyHistory() {
       {songs.length === 0 ? (
         <NoMatches />
       ) : (
-        <SpotifyTableDownloader tracks={songs} showPreview={true} />
+        <SpotifyTableDownloader
+          tracks={songs}
+          showPreview={true}
+          source="spotify"
+        />
       )}
     </>
   );

@@ -3,7 +3,6 @@ import type {Metadata} from 'next';
 import {Inter as FontSans} from 'next/font/google';
 import ContextProviders from './ContextProviders';
 import Link from 'next/link';
-import {GoogleAnalytics} from '@next/third-parties/google';
 import {cn} from '@/lib/utils';
 import {Icons} from '@/components/icons';
 import {Button} from '@/components/ui/button';
@@ -13,6 +12,7 @@ import {Suspense} from 'react';
 import WebMCPInit from './WebMCPInit';
 import WebMCPTools from './WebMCPTools';
 import {getSiteUrl} from '@/lib/site-url';
+import RegionAwareAnalytics from './RegionAwareAnalytics';
 
 const fontSans = FontSans({
   subsets: ['latin'],
@@ -98,11 +98,18 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
           <main className="flex flex-col flex-1 items-center align-center min-h-0 p-4">
             {children}
           </main>
+          <footer className="shrink-0 border-t border-border/60 px-4 md:px-8 py-2">
+            <div className="max-w-screen-xl mx-auto text-xs text-muted-foreground flex justify-end">
+              <Link href="/privacy" className="hover:underline">
+                Privacy
+              </Link>
+            </div>
+          </footer>
         </ContextProviders>
         <Toaster />
         <WebMCPInit />
         <WebMCPTools />
-        <GoogleAnalytics gaId="G-LEE7EDJH14" />
+        <RegionAwareAnalytics gaId="G-LEE7EDJH14" />
       </body>
     </html>
   );

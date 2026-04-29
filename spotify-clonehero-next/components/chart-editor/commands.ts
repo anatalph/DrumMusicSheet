@@ -222,7 +222,7 @@ export class MoveEntitiesCommand implements EditCommand {
   private readonly ctx: EntityContext;
 
   constructor(
-    private kind: EntityKind,
+    readonly kind: EntityKind,
     private ids: readonly string[],
     private tickDelta: number,
     private laneDelta: number,

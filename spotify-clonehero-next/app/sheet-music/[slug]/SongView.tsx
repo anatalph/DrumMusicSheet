@@ -37,6 +37,7 @@ import {ChartResponseEncore} from '@/lib/chartSelection';
 
 import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
+import {track as trackEvent} from '@/lib/analytics/track';
 import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager, PracticeModeConfig} from '@/lib/preview/audioManager';
@@ -197,6 +198,62 @@ export default function Renderer({
   const router = useRouter();
   const [isSaved, setIsSaved] = useState(false);
 
+  // Fire sheet_music_loaded once per chart mount.
+  useEffect(() => {
+    trackEvent({
+      event: 'sheet_music_loaded',
+      slug: metadata.md5,
+      instrument,
+      difficulty: selectedDifficulty,
+      hasAudio: audioFiles.length > 0,
+      hasVideo: !!metadata.hasVideoBackground,
+    });
+    // selectedDifficulty intentionally read at first mount only — difficulty
+    // changes get their own sheet_music_difficulty_changed event.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadata.md5]);
+
+  // Track play/pause edges and emit a sheet_music_playback_session for each
+  // play→pause segment (covers most "time spent playing" usage). On unmount
+  // / page-hide while still playing, flush any in-flight segment.
+  const playStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (isPlaying) {
+      playStartRef.current = Date.now();
+      trackEvent({event: 'sheet_music_play'});
+      return;
+    }
+    if (playStartRef.current == null) return;
+    const seconds = (Date.now() - playStartRef.current) / 1000;
+    playStartRef.current = null;
+    trackEvent({event: 'sheet_music_pause'});
+    if (seconds >= 1) {
+      trackEvent({
+        event: 'sheet_music_playback_session',
+        playSeconds: Math.round(seconds),
+      });
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    function flush() {
+      if (playStartRef.current == null) return;
+      const seconds = (Date.now() - playStartRef.current) / 1000;
+      playStartRef.current = null;
+      if (seconds >= 1) {
+        trackEvent({
+          event: 'sheet_music_playback_session',
+          playSeconds: Math.round(seconds),
+        });
+      }
+    }
+    window.addEventListener('pagehide', flush);
+    return () => {
+      flush();
+      window.removeEventListener('pagehide', flush);
+    };
+  }, []);
+
   useEffect(() => {
     async function checkSaved() {
       try {
@@ -229,6 +286,27 @@ export default function Renderer({
   const updatePlayClickTrack = (value: boolean) => {
     audioManagerRef.current?.setVolume('click', value ? masterClickVolume : 0);
     setPlayClickTrack(value);
+    trackEvent({event: 'sheet_music_click_track_toggled', enabled: value});
+  };
+
+  const updateEnableColors = (value: boolean) => {
+    setEnableColors(value);
+    trackEvent({event: 'sheet_music_enable_colors_toggled', enabled: value});
+  };
+
+  const updateShowLyrics = (value: boolean) => {
+    setShowLyrics(value);
+    trackEvent({event: 'sheet_music_show_lyrics_toggled', enabled: value});
+  };
+
+  const updateViewCloneHero = (value: boolean) => {
+    setViewCloneHero(value);
+    trackEvent({event: 'sheet_music_clone_hero_toggled', enabled: value});
+  };
+
+  const updateShowBarNumbers = (value: boolean) => {
+    setShowBarNumbers(value);
+    trackEvent({event: 'sheet_music_show_bar_numbers_toggled', enabled: value});
   };
 
   const handleClickVolumeChange = useMemo(
@@ -244,12 +322,14 @@ export default function Renderer({
     if (audioManagerRef.current) {
       audioManagerRef.current.setTempo(newTempo);
       setTempo(newTempo);
+      trackEvent({event: 'sheet_music_speed_changed', speed: newTempo});
     }
   };
 
   // Zoom control handlers
   const handleZoomChange = (newZoom: number) => {
     setZoom(newZoom);
+    trackEvent({event: 'sheet_music_zoom_changed', zoom: newZoom});
   };
 
   const handleZoomIn = () => {
@@ -286,6 +366,7 @@ export default function Renderer({
         }
         setIsSaved(false);
         toast.success('Song removed');
+        trackEvent({event: 'sheet_music_unfavorited'});
         return;
       }
 
@@ -297,6 +378,7 @@ export default function Renderer({
       }
       setIsSaved(true);
       toast.success('Song saved');
+      trackEvent({event: 'sheet_music_favorited'});
     } catch (error) {
       console.error('Authentication check failed:', error);
       toast.error('Failed to check authentication');
@@ -320,6 +402,7 @@ export default function Renderer({
       return;
     }
     toast.success('Section saved');
+    trackEvent({event: 'sheet_music_practice_section_saved'});
     const res = await getPracticeSections(metadata.md5);
     if (res?.ok)
       setSavedSections(
@@ -744,6 +827,10 @@ export default function Renderer({
   const difficultySelectorOnSelect = useCallback(
     (selectedDifficulty: string) => {
       setSelectedDifficulty(selectedDifficulty as Difficulty);
+      trackEvent({
+        event: 'sheet_music_difficulty_changed',
+        difficulty: selectedDifficulty,
+      });
     },
     [],
   );
@@ -1056,7 +1143,7 @@ export default function Renderer({
               <Switch
                 id="colors"
                 checked={enableColors}
-                onCheckedChange={setEnableColors}
+                onCheckedChange={updateEnableColors}
               />
               <label htmlFor="colors" className="text-sm font-medium">
                 Enable colors
@@ -1067,7 +1154,7 @@ export default function Renderer({
                 <Switch
                   id="lyrics"
                   checked={showLyrics}
-                  onCheckedChange={setShowLyrics}
+                  onCheckedChange={updateShowLyrics}
                 />
                 <label htmlFor="lyrics" className="text-sm font-medium">
                   Show lyrics
@@ -1078,7 +1165,7 @@ export default function Renderer({
               <Switch
                 id="clonehero"
                 checked={viewCloneHero}
-                onCheckedChange={setViewCloneHero}
+                onCheckedChange={updateViewCloneHero}
               />
               <label htmlFor="clonehero" className="text-sm font-medium">
                 View as Clone Hero
@@ -1089,7 +1176,7 @@ export default function Renderer({
                 <Switch
                   id="measurenumbers"
                   checked={showBarNumbers}
-                  onCheckedChange={setShowBarNumbers}
+                  onCheckedChange={updateShowBarNumbers}
                 />
                 <label htmlFor="measurenumbers" className="text-sm font-medium">
                   Show measure numbers

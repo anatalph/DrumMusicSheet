@@ -23,6 +23,7 @@ import {
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
+import {track} from '@/lib/analytics/track';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackUrls} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
@@ -62,10 +63,13 @@ export type TableDownloadStates =
   | 'not-downloading'
   | 'failed';
 
+export type SpotifyTableSource = 'spotify' | 'spotify_history';
+
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line unused-imports/no-unused-vars
   interface TableMeta<TData extends RowData> {
     setDownloadState(index: string, state: TableDownloadStates): void;
+    source: SpotifyTableSource;
   }
 }
 
@@ -319,8 +323,9 @@ const columns = [
         return null;
       }
 
-      const {artist, song, charter, file, state} = value;
-      const updateDownloadState = props.table.options.meta?.setDownloadState;
+      const {artist, song, charter, file, md5, state} = value;
+      const meta = props.table.options.meta;
+      const updateDownloadState = meta?.setDownloadState;
       function update(state: TableDownloadStates) {
         if (updateDownloadState != null) {
           const key = props.row.original.download?.md5;
@@ -335,7 +340,9 @@ const columns = [
           song={song}
           charter={charter}
           url={file}
+          md5={md5}
           state={state}
+          source={meta?.source ?? 'spotify'}
           updateDownloadState={update}
         />
       );
@@ -466,10 +473,12 @@ export default function SpotifyTableDownloader({
   tracks,
   showPreview,
   showPlayCount,
+  source,
 }: {
   tracks: SpotifyPlaysRecommendations[];
   showPreview: boolean;
   showPlayCount?: boolean;
+  source: SpotifyTableSource;
 }) {
   const hasPlayCount = showPlayCount ?? tracks[0].playCount != null;
   const hasSource = tracks.some(
@@ -575,6 +584,7 @@ export default function SpotifyTableDownloader({
           return {...prev, [index]: state};
         });
       },
+      source,
     },
     enableExpanding: true,
     enableMultiSort: true,
@@ -605,13 +615,30 @@ export default function SpotifyTableDownloader({
       ? totalSize - (virtualRows?.[virtualRows.length - 1]?.end || 0)
       : 0;
 
-  const filtersChangedCallback = useCallback((filters: AllowedInstrument[]) => {
-    setInstrumentFilters(filters);
-  }, []);
+  // Filters fires its initial empty selection on mount via a useEffect; skip
+  // that one to avoid spurious "filter changed to nothing" events.
+  const filtersChangeFiredRef = useRef(false);
+  const filtersChangedCallback = useCallback(
+    (filters: AllowedInstrument[]) => {
+      setInstrumentFilters(filters);
+      if (!filtersChangeFiredRef.current) {
+        filtersChangeFiredRef.current = true;
+        return;
+      }
+      track({
+        event: 'spotify_instrument_filter_changed',
+        instruments: filters.join(','),
+        count: filters.length,
+      });
+    },
+    [],
+  );
 
   const downloadedFilterChangedCallback = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setHideDownloadedFilter(e.target.checked);
+      const enabled = e.target.checked;
+      setHideDownloadedFilter(enabled);
+      track({event: 'spotify_hide_downloaded_toggled', enabled});
     },
     [],
   );
@@ -782,14 +809,18 @@ function DownloadButton({
   song,
   charter,
   url,
+  md5,
   state,
+  source,
   updateDownloadState,
 }: {
   artist: string;
   song: string;
   charter: string;
   url: string;
+  md5: string;
   state: TableDownloadStates;
+  source: SpotifyTableSource;
   updateDownloadState: (state: TableDownloadStates) => void;
 }) {
   const handler = useCallback(async () => {
@@ -799,7 +830,11 @@ function DownloadButton({
 
     try {
       updateDownloadState('downloading');
-      await downloadSong(artist, song, charter, url, {asSng: true});
+      await downloadSong(artist, song, charter, url, {
+        asSng: true,
+        source,
+        md5,
+      });
     } catch (err) {
       console.log('Error while downloading', artist, song, charter, url, err);
       updateDownloadState('failed');
@@ -807,7 +842,7 @@ function DownloadButton({
     }
 
     updateDownloadState('downloaded');
-  }, [state, updateDownloadState, artist, song, charter, url]);
+  }, [state, updateDownloadState, artist, song, charter, url, md5, source]);
 
   switch (state) {
     case 'downloaded':

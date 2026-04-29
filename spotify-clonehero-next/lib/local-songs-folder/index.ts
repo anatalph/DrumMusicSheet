@@ -1,7 +1,7 @@
 import {set} from 'idb-keyval';
 import filenamify from 'filenamify/browser';
-import {sendGAEvent} from '@next/third-parties/google';
 
+import {track} from '@/lib/analytics/track';
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
 import {SngStream} from '@eliwhite/parse-sng';
@@ -80,7 +80,7 @@ export async function scanForInstalledCharts(
   // on a trailing animation frame.
   flushProgress();
 
-  sendGAEvent({
+  track({
     event: 'charts_scanned',
     value: installedCharts.length,
   });
@@ -282,13 +282,23 @@ export async function downloadSong(
     folder?: FileSystemDirectoryHandle;
     replaceExisting?: boolean;
     asSng?: boolean;
+    source?:
+      | 'spotify'
+      | 'spotify_history'
+      | 'sheet_music'
+      | 'karaoke'
+      | 'unknown';
+    md5?: string;
   },
 ): Promise<null | {
   newParentDirectoryHandle: FileSystemDirectoryHandle;
   fileName: string;
 }> {
-  sendGAEvent({
-    event: 'download_song',
+  track({
+    event: 'chart_downloaded',
+    source: options?.source ?? 'unknown',
+    format: options?.asSng === false ? 'chart' : 'sng',
+    md5: options?.md5,
   });
 
   const response = await fetch(url, {

@@ -309,7 +309,11 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       )}
 
       {songs && (
-        <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
+        <SpotifyTableDownloader
+          tracks={songs}
+          showPreview={authenticated}
+          source="spotify_history"
+        />
       )}
     </>
   );

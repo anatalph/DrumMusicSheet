@@ -56,6 +56,8 @@ import {
   ADD_LYRICS_CAPABILITIES,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
+import {MoveEntitiesCommand} from '@/components/chart-editor/commands';
+import {track} from '@/lib/analytics/track';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
@@ -314,8 +316,15 @@ export default function AddLyricsClient() {
   );
 }
 
+// Lyric/phrase entity kinds counted toward "manual moves" before export.
+const LYRIC_MOVE_KINDS: ReadonlySet<string> = new Set([
+  'lyric',
+  'phrase-start',
+  'phrase-end',
+]);
+
 function LyricsAlignInner() {
-  const {dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch, audioManagerRef} = useChartEditorContext();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
@@ -414,6 +423,10 @@ function LyricsAlignInner() {
       }
 
       setStatus('input');
+      track({
+        event: 'add_lyrics_chart_loaded',
+        sourceFormat: result.sourceFormat,
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to load chart';
       setError(message);
@@ -440,6 +453,8 @@ function LyricsAlignInner() {
       })),
     );
     setStatus('processing');
+    track({event: 'add_lyrics_align_started'});
+    const alignStartedAt = Date.now();
 
     try {
       let vocals16k: Float32Array;
@@ -563,17 +578,24 @@ function LyricsAlignInner() {
       setAlignedLines(result.lines);
       setAlignedSyllables(result.syllables);
       setStatus('done');
+      track({
+        event: 'add_lyrics_align_completed',
+        totalMs: Date.now() - alignStartedAt,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setStatus('error');
+      const failedStep = alignSteps.find(s => s.status === 'active')?.key
+        ?? 'unknown';
       setAlignSteps(prev =>
         prev.map(s =>
           s.status === 'active' ? {...s, status: 'error', detail: msg} : s,
         ),
       );
+      track({event: 'add_lyrics_align_failed', step: failedStep});
     }
-  }, [chart, lyrics, updateAlignStep]);
+  }, [chart, lyrics, updateAlignStep, alignSteps]);
 
   const handleDownload = useCallback(() => {
     if (!chart || alignedSyllables.length === 0) return;
@@ -616,11 +638,21 @@ function LyricsAlignInner() {
       a.click();
       URL.revokeObjectURL(url);
 
+      const manualMoveCount = state.undoStack.filter(
+        cmd =>
+          cmd instanceof MoveEntitiesCommand && LYRIC_MOVE_KINDS.has(cmd.kind),
+      ).length;
+      track({
+        event: 'add_lyrics_exported',
+        format: chart.sourceFormat === 'sng' ? 'sng' : 'zip',
+        manualMoveCount,
+      });
+
       toast.success('Chart exported with lyrics');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Export failed');
     }
-  }, [chart, alignedSyllables]);
+  }, [chart, alignedSyllables, state.undoStack]);
 
   const showEditor = status === 'done' && alignedLines.length > 0;
 
@@ -767,6 +799,7 @@ function LyricsAlignInner() {
               setAlignedSyllables([]);
               setVocalsWaveform(null);
               setStatus('input');
+              track({event: 'add_lyrics_realign'});
             }}>
             Re-enter lyrics
           </Button>
