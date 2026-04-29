@@ -53,7 +53,12 @@ export type AnalyticsEvent =
   // Add-lyrics
   | {event: 'add_lyrics_chart_loaded'; sourceFormat: 'folder' | 'sng' | 'zip'}
   | {event: 'add_lyrics_align_started'}
-  | {event: 'add_lyrics_align_completed'; totalMs: number}
+  | {
+      event: 'add_lyrics_align_completed';
+      totalMs: number;
+      lowConfidence: 0 | 1;
+      lowConfidenceFrac: number;
+    }
   | {event: 'add_lyrics_align_failed'; step: string}
   | {event: 'add_lyrics_realign'}
   | {
@@ -78,12 +83,15 @@ function applyUserId(): void {
   window.gtag('set', {user_id: cachedUserId ?? undefined});
 }
 
-// `sendGAEvent` flattens object params onto the GA4 `event` payload, so a
-// typed wrapper is enough — no per-event parameter mapping needed.
+// `sendGAEvent` is a thin wrapper that pushes `arguments` onto the
+// dataLayer, so it must be called with gtag's positional form
+// (gtag('event', name, params)) — passing a single object pushes
+// `[{event, ...}]` which gtag rejects as "Invalid command name".
 export function track(payload: AnalyticsEvent): void {
   try {
     applyUserId();
-    sendGAEvent(payload);
+    const {event, ...params} = payload;
+    sendGAEvent('event', event, params);
   } catch {
     // Analytics never throws into product code.
   }
