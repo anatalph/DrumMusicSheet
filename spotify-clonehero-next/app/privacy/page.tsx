@@ -104,8 +104,8 @@ export default function PrivacyPage() {
       <p>
         Questions about this policy can go to the project&apos;s GitHub
         repository:{' '}
-        <a href="https://github.com/TheSavior/spotify-clonehero">
-          github.com/TheSavior/spotify-clonehero
+        <a href="https://github.com/elicwhite/spotify-clonehero">
+          github.com/elicwhite/spotify-clonehero
         </a>
         .
       </p>
